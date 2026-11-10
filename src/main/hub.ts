@@ -323,13 +323,16 @@ export class Hub implements SessionHost {
    * Once per finished reply, one hidden turn in the session: next steps to offer as buttons, and a check of the auto
    * tags (added or removed tags show as a small line in the chat). See Settings → Chats.
    */
-  private async suggestNext(s: Session) {
+  private async suggestNext(s: Session, settled = false) {
     if (demo) return;
     // The reply to check: the latest item, skipping notes Happy adds after it (worktree detected, tag changes…).
     const last = [...s.items].reverse().find((i) => i.kind !== "system" && i.kind !== "tags");
     const st = settings();
     const prompt = checkPrompt({ nextSteps: st.nextSteps, tags: st.autoTags ? st.tags : [], current: s.meta.tags ?? [] });
     if (!prompt || isSystemSession(s.meta) || s.meta.archived || s.pending || s.queued.length) return;
+    // A chat waiting on background work isn't done: Claude Code wakes the agent when that work ends, and a hidden
+    // message arriving then aborts its turn ("stopped partway"). Its next real idle gets checked instead.
+    if (s.hasLiveTasks) return;
     if (!last || last.kind !== "assistant" || isCheckAnswer(last.text) || s.nextStepsFor === last.id || this.suggesting.has(s.id)) return;
     // Fresh replies only: not every old chat when Happy starts.
     if (Date.now() - (last.ts ?? 0) > 10 * 60_000) return;
@@ -340,6 +343,18 @@ export class Hub implements SessionHost {
         this.checkLater.add(s.id);
         setTimeout(() => (this.checkLater.delete(s.id), this.sessions.has(s.id) && s.status === "idle" && void this.suggestNext(s)), wait + 500);
       }
+      return;
+    }
+    // Idle has to hold for a few seconds (the agent can start a new turn right after one ends), and still hold when we send.
+    if (!settled) {
+      if (this.settling.has(s.id)) return;
+      this.settling.add(s.id);
+      const at = last.id;
+      setTimeout(() => {
+        this.settling.delete(s.id);
+        if (this.sessions.has(s.id) && s.status === "idle" && !s.hasLiveTasks && !s.queued.length && [...s.items].reverse().find((i) => i.kind !== "system" && i.kind !== "tags")?.id === at)
+          void this.suggestNext(s, true);
+      }, 4000);
       return;
     }
     this.lastCheck.set(s.id, Date.now());
@@ -368,6 +383,7 @@ export class Hub implements SessionHost {
   }
 
   private checkLater = new Set<string>();
+  private settling = new Set<string>();
   /** One line per next-steps check, in next-steps.log next to Happy's state (for "why didn't I get buttons?"). */
   private logCheck(s: Session, what: string, started: number) {
     try {
@@ -906,7 +922,7 @@ export class Hub implements SessionHost {
           { thread_id: z.string(), body: z.string().describe("Plain-text body, written in the user's style") },
           async (a) => {
             const rcpt = await this.gmail.replyDefaults(a.thread_id);
-            const id = await this.gmail.saveDraft(a.thread_id, a.body, rcpt, undefined, this.contacts.nameFor);
+            const id = await this.gmail.saveDraft(a.thread_id, a.body, rcpt, undefined, this.contacts.nameFor, undefined, rcpt.from);
             return text({ draft_id: id, to: rcpt.to, cc: rcpt.cc });
           },
         ),
