@@ -64,7 +64,6 @@ export function sessionMenuItems(opts: {
     items.push({
       label: s.engine === "cursor" ? "Fork (not for Cursor)" : "Fork",
       key: "f",
-      hint: "same history, its own chat",
       onSelect: () =>
         s.engine === "cursor"
           ? opts.toast("Cursor chats can't be forked yet")
