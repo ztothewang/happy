@@ -1,0 +1,23 @@
+{
+  "description": "Acme: a web app (api + web) on Cloud Run",
+  "environments": [
+    { "id": "prod", "name": "Production", "color": "#3b82f6", "tag": "", "envFile": "env.prod" },
+    { "id": "eu", "name": "Europe", "tag": "eu", "envFile": "env.eu.prod" }
+  ],
+  "deploy": {
+    "tagPrefix": "deployed",
+    "components": [
+      { "id": "api", "short": "api", "label": "API", "paths": ["api/"] },
+      { "id": "web", "short": "web", "label": "Web", "paths": ["web/"] }
+    ],
+    "commands": {
+      "api": "ENV_FILE={envFile} ./scripts/deploy-api.sh",
+      "web": "ENV_FILE={envFile} ./scripts/deploy-web.sh",
+      "core": "ENV_FILE={envFile} ./scripts/deploy-api.sh && ENV_FILE={envFile} ./scripts/deploy-web.sh",
+      "full": "ENV_FILE={envFile} ./scripts/deploy.sh"
+    }
+  },
+  "packages": [{ "dir": "sdk" }],
+  "glossary": { "eu": "Europe" },
+  "cloud": { "provider": "gcp" }
+}

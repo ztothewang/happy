@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- iOS / home-screen icon: full-bleed square, no transparency (iOS applies its own rounded mask). -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE54D"/>
+      <stop offset="1" stop-color="#FFC800"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <ellipse cx="372" cy="400" rx="54" ry="96" fill="#1B1B1B"/>
+  <ellipse cx="652" cy="400" rx="54" ry="96" fill="#1B1B1B"/>
+  <path d="M262 600 Q512 860 762 600" fill="none" stroke="#1B1B1B" stroke-width="50" stroke-linecap="round"/>
+</svg>
