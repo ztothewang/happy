@@ -7,6 +7,7 @@ import { lastMessageAt, relTime } from "./models";
 import { SessionView } from "./SessionView";
 import { DRAG_TYPE, RowSub } from "./Sidebar";
 import { grid, useGrid } from "./grid";
+import { viewing } from "./viewing";
 
 /** Plain text of the latest message (no Markdown), for card previews. */
 function latest(s: SessionState): { who: string; text: string } | undefined {
@@ -103,6 +104,7 @@ function ChatPeek({ s, order, onPeek, onOpen }: { s: SessionState; order: Sessio
   const ref = useRef<HTMLDivElement>(null);
   const picked = useGrid();
   const i = order.findIndex((x) => x.id === s.id);
+  useEffect(() => viewing.add(s.id), [s.id]);
   const step = (d: number) => order.length && onPeek(order[(i + d + order.length) % order.length].id);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -163,6 +165,18 @@ function GridCard({ s, index, onOpen, sessions }: { s: SessionState; index: numb
   const ref = useRef<HTMLDivElement>(null);
   const menu = useMenu();
   const [over, setOver] = useState(false);
+  // A card at least half on screen counts as looking at the chat.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let stop: (() => void) | undefined;
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !stop) stop = viewing.add(s.id);
+      else if (!e.isIntersecting && stop) (stop(), (stop = undefined));
+    }, { threshold: 0.5 });
+    io.observe(el);
+    return () => (io.disconnect(), stop?.());
+  }, [s.id]);
   return (
     <div
       ref={ref}

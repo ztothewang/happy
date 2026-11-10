@@ -13,6 +13,7 @@ import { MobileApp } from "./mobile/MobileApp";
 import { Lightbox, openLightbox } from "./Lightbox";
 import { ResizeHandle, usePanelWidth } from "./resize";
 import { CHAT_WALL, CALENDAR, CLOUD, EMAIL, GRID, SETTINGS, TASKS, TERMINAL, STATS } from "./Sidebar";
+import { viewing } from "./viewing";
 import { ChatWallView, ChatGridView } from "./ChatViews";
 import { useGrid } from "./grid";
 import { SettingsView } from "./SettingsView";
@@ -169,7 +170,7 @@ function Shell() {
         const finished = before === "running" && s.status === "idle";
         const blocked = before !== "needs_permission" && s.status === "needs_permission";
         const failed = before === "running" && s.status === "error";
-        if ((finished || blocked || failed) && !isSystemSession(s) && (s.id !== selectedRef.current || !document.hasFocus())) {
+        if ((finished || blocked || failed) && !isSystemSession(s) && ((s.id !== selectedRef.current && !viewing.has(s.id)) || !document.hasFocus())) {
           const kind = blocked ? "blocked" : failed ? "failed" : "done";
           setUnread((u) => new Map(u).set(s.id, kind));
           new Notification(s.title, {
@@ -218,6 +219,21 @@ function Shell() {
       n.delete(id);
       return n;
     });
+  }, []);
+
+  // A chat looked at in the grid or the Chat wall's modal counts as seen too.
+  useEffect(() => {
+    const onSeen = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      setUnread((u) => {
+        if (!u.has(id)) return u;
+        const n = new Map(u);
+        n.delete(id);
+        return n;
+      });
+    };
+    window.addEventListener("happy:seen", onSeen);
+    return () => window.removeEventListener("happy:seen", onSeen);
   }, []);
 
   // Dock badge = number of sessions with something new.
