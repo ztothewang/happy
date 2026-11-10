@@ -245,12 +245,12 @@ function AssistantBody({ it, onSimplify, onPin, onWtf, onStatus }: { it: Transcr
           status
         </button>
       )}
-      <CopyBtn text={it.text} />
       {onPin && (
         <button className={`pin-btn ${it.pinned ? "on" : ""}`} onClick={() => onPin(!it.pinned)} title={it.pinned ? "Unpin" : "Pin this reply (see it in the Pinned pane)"}>
           <Pin size={11} /> {it.pinned ? "pinned" : "pin"}
         </button>
       )}
+      <CopyBtn text={it.text} />
       {err && <span className="del small"> {err}</span>}
     </>
   );
