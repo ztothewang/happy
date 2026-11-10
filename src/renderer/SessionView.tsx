@@ -1,5 +1,6 @@
 import { Copy, Pin } from "lucide-react";
 import { QueuedMessages, TodoFloat } from "./Todos";
+import { RoutineRunsFloat } from "./RoutineRuns";
 import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PermissionDecision, SessionState, TranscriptItem } from "../shared/types";
 import { hub } from "./App";
@@ -164,12 +165,12 @@ function ToolBlock({ items, cwd, showAll }: { items: TranscriptItem[]; cwd: stri
   );
 }
 
-function Line({ b, cwd, who, showTools, onSimplify, onPin, onWtf }: { b: Block; cwd: string; who: string; showTools: boolean; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void }) {
+function Line({ b, cwd, who, showTools, onSimplify, onPin, onWtf, onStatus }: { b: Block; cwd: string; who: string; showTools: boolean; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void }) {
   const pane = usePane();
   if (b.kind === "tools") return <ToolBlock items={b.items} cwd={cwd} showAll={showTools} />;
   return (
     <div data-item={b.it.id} className={b.it.pinned ? "pinned-item" : undefined}>
-      <ItemLine it={b.it} who={who} openFile={(f) => pane.open({ kind: "file", path: f })} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} />
+      <ItemLine it={b.it} who={who} openFile={(f) => pane.open({ kind: "file", path: f })} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} />
     </div>
   );
 }
@@ -177,6 +178,9 @@ function Line({ b, cwd, who, showTools, onSimplify, onPin, onWtf }: { b: Block; 
 /** "wtf" macro: a visible follow-up asking the agent where things stand. */
 const WTF_PROMPT =
   "Quick status check. In short plain bullets: what's been done so far, and what remains (including anything you need from me). No background, no code.";
+
+/** "status" macro: just asks. */
+const STATUS_PROMPT = "Status?";
 
 /** Copy a reply's original Markdown to the clipboard. */
 function CopyBtn({ text }: { text: string }) {
@@ -198,7 +202,7 @@ function CopyBtn({ text }: { text: string }) {
 }
 
 /** Assistant reply with an optional plain-language rewrite (shown by default once made) and a toggle. */
-function AssistantBody({ it, onSimplify, onPin, onWtf }: { it: TranscriptItem; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void }) {
+function AssistantBody({ it, onSimplify, onPin, onWtf, onStatus }: { it: TranscriptItem; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void }) {
   const [showOriginal, setShowOriginal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -236,6 +240,11 @@ function AssistantBody({ it, onSimplify, onPin, onWtf }: { it: TranscriptItem; o
           wtf?
         </button>
       )}
+      {onStatus && (
+        <button className="simplify" onClick={onStatus} title={`Send "${STATUS_PROMPT}"`}>
+          status
+        </button>
+      )}
       <CopyBtn text={it.text} />
       {onPin && (
         <button className={`pin-btn ${it.pinned ? "on" : ""}`} onClick={() => onPin(!it.pinned)} title={it.pinned ? "Unpin" : "Pin this reply (see it in the Pinned pane)"}>
@@ -254,6 +263,7 @@ const ItemLine = memo(function ItemLine({
   onSimplify,
   onPin,
   onWtf,
+  onStatus,
 }: {
   it: TranscriptItem;
   who: string;
@@ -261,6 +271,7 @@ const ItemLine = memo(function ItemLine({
   onSimplify?: () => Promise<void>;
   onPin?(v: boolean): void;
   onWtf?(): void;
+  onStatus?(): void;
 }) {
   const ts = <span className="ts">{fmtClock(it.ts)}</span>;
   switch (it.kind) {
@@ -287,7 +298,7 @@ const ItemLine = memo(function ItemLine({
           {ts}
           <span className="who">{who}</span>
           <div className="body">
-            <AssistantBody it={it} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} />
+            <AssistantBody it={it} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} />
           </div>
         </div>
       );
@@ -506,6 +517,7 @@ export function SessionView({
             <Pin size={12} /> {s.items.filter((i) => i.pinned).length}
           </button>
         )}
+        {s.routineId && <RoutineRunsFloat s={s} />}
         {!s.isManager && !s.isCloud && !s.isEmail && <TodoFloat s={s} />}
       </div>
       <div className={`log ${s.isManager || s.isCloud || s.isEmail ? "no-ts" : ""}`} ref={scroller} onScroll={onScroll}>
@@ -538,6 +550,7 @@ export function SessionView({
             onSimplify={b.kind === "item" && b.it.kind === "assistant" && (b.it.id === lastReplyId || !!b.it.simplified) ? () => hub().simplify(s.id, b.it.id) : undefined}
             onPin={b.kind === "item" && b.it.kind === "assistant" ? (v) => void hub().pinItem(s.id, b.it.id, v) : undefined}
             onWtf={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, WTF_PROMPT) : undefined}
+            onStatus={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, STATUS_PROMPT) : undefined}
           />
           {b.kind === "item" && b.it.id === lastMsgId && b.it.kind !== "assistant" && (
             <div className="ln macros">
@@ -546,6 +559,9 @@ export function SessionView({
               <div className="body">
                 <button className="simplify" onClick={() => void hub().send(s.id, WTF_PROMPT)} title="Ask the agent: what's done, what remains">
                   wtf?
+                </button>
+                <button className="simplify" onClick={() => void hub().send(s.id, STATUS_PROMPT)} title={`Send "${STATUS_PROMPT}"`}>
+                  status
                 </button>
               </div>
             </div>

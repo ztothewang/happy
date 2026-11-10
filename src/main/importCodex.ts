@@ -3,6 +3,7 @@ import { createReadStream, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { createZstdDecompress } from "node:zlib";
 import type { CodexThreadInfo, TranscriptItem } from "../shared/types.js";
 import { clip, summarizeArgs } from "./session.js";
 
@@ -108,10 +109,13 @@ function toItem(it: any, ts: number, durationMs: number | undefined): Omit<Trans
 
 /** The last KEEP_ITEMS rows of a Codex thread's history, streamed from its rollout file (they can be hundreds of MB). */
 export async function readCodexHistory(rolloutPath: string): Promise<{ items: TranscriptItem[]; dropped: number }> {
-  if (!existsSync(rolloutPath)) return { items: [], dropped: 0 };
+  // Codex compresses archived threads (rollout-….jsonl.zst).
+  const zst = !existsSync(rolloutPath) && existsSync(`${rolloutPath}.zst`);
+  if (!zst && !existsSync(rolloutPath)) return { items: [], dropped: 0 };
   const ring: TranscriptItem[] = [];
   let total = 0;
-  const rl = createInterface({ input: createReadStream(rolloutPath, { encoding: "utf8" }), crlfDelay: Infinity });
+  const input = zst ? createReadStream(`${rolloutPath}.zst`).pipe(createZstdDecompress()).setEncoding("utf8") : createReadStream(rolloutPath, { encoding: "utf8" });
+  const rl = createInterface({ input, crlfDelay: Infinity });
   for await (const line of rl) {
     if (!line.includes('"item_completed"')) continue;
     let d: any;

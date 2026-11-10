@@ -34,6 +34,10 @@ export interface SessionMeta {
   cursorMode?: CursorMode;
   /** Sidebar group (undefined = ungrouped). */
   groupId?: string;
+  /** A routine's chat (Claude or Codex app routine id, e.g. "claude:sync-prod-prompts"): shows one run at a time. */
+  routineId?: string;
+  /** The run shown (its engine session id); undefined = follow the latest run. */
+  routineRunId?: string;
   /** Your reminders and follow-ups for this chat (added in the app). */
   todos?: SessionTodo[];
   /** The agent's own task list (Claude TodoWrite / Codex todo_list), latest version. */
@@ -198,6 +202,16 @@ export interface Routine {
   cwd?: string;
   /** The routine's prompt/definition file. */
   file: string;
+}
+
+/** One run of a routine: its own Claude session or Codex thread. */
+export interface RoutineRun {
+  /** Claude session id or Codex thread id. */
+  id: string;
+  startedAt: number;
+  cwd: string;
+  /** Codex: the run's rollout file. */
+  rolloutPath?: string;
 }
 
 /** A link's preview card (Open Graph). */
@@ -1115,6 +1129,10 @@ export interface HubApi {
   refreshCodexPrices(): Promise<boolean>;
   linkPreview(url: string): Promise<LinkPreview | null>;
   routines(): Promise<Routine[]>;
+  /** A routine chat's runs, newest first. */
+  routineRuns(id: string): Promise<RoutineRun[]>;
+  /** Show one run in a routine chat (null = follow the latest). */
+  showRoutineRun(id: string, runId: string | null): Promise<void>;
   /** Open a web link in Chrome (else the default browser), outside Happy. */
   openInChrome(url: string): Promise<void>;
   /** The main repo's .happy/config.json (environments, deploys…); {} when there is none. */

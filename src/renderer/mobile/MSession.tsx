@@ -421,6 +421,7 @@ export function MSession({ s, onBack, title, send, placeholder }: { s: SessionSt
                 {b.it.id === lastAssistant?.id && !busy && (
                   <div className="mx-quick">
                     <button onClick={() => submit(WTF)}>wtf</button>
+                    <button onClick={() => submit("Status?")}>status</button>
                     {!b.it.simplified && <button onClick={() => void hub().simplify(s.id, b.it.id)}>simplify</button>}
                     <button onClick={() => submit("continue")}>continue</button>
                   </div>

@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Routine } from "../shared/types.js";
+import type { Routine, RoutineRun } from "../shared/types.js";
 
 /** Cron fields → sets of allowed values (supports *, lists, ranges and steps). */
 function field(src: string, min: number, max: number): Set<number> {
@@ -137,4 +139,54 @@ function codexRoutines(): Routine[] {
 /** Scheduled routines from the Claude desktop app and the Codex app (read from their files; read-only). */
 export function listRoutines(): Routine[] {
   return [...claudeRoutines(), ...codexRoutines()].sort((a, b) => Number(b.enabled) - Number(a.enabled) || (a.nextRun ?? Infinity) - (b.nextRun ?? Infinity));
+}
+
+/** Claude desktop session files read so far (they never change routine), by path: the run they hold, if any. */
+const claudeRunCache = new Map<string, { task: string; run: RoutineRun } | null>();
+
+/** Runs of a Claude desktop routine: its sessions marked with the routine's scheduledTaskId (read async; there are thousands). */
+async function claudeRuns(taskId: string): Promise<RoutineRun[]> {
+  const base = join(homedir(), "Library/Application Support/Claude/claude-code-sessions");
+  const out: RoutineRun[] = [];
+  if (!existsSync(base)) return out;
+  const ls = (d: string) => readdir(d).catch(() => [] as string[]);
+  for (const a of await ls(base))
+    for (const b of await ls(join(base, a))) {
+      const dir = join(base, a, b);
+      for (const f of (await ls(dir)).filter((f) => f.startsWith("local_") && f.endsWith(".json"))) {
+        const path = join(dir, f);
+        if (!claudeRunCache.has(path)) {
+          let hit: { task: string; run: RoutineRun } | null = null;
+          try {
+            const j = JSON.parse(await readFile(path, "utf8"));
+            if (j.scheduledTaskId && j.cliSessionId) hit = { task: j.scheduledTaskId, run: { id: j.cliSessionId, startedAt: j.createdAt ?? 0, cwd: j.cwd } };
+          } catch {}
+          claudeRunCache.set(path, hit);
+        }
+        const hit = claudeRunCache.get(path);
+        if (hit?.task === taskId) out.push(hit.run);
+      }
+    }
+  return out;
+}
+
+/** Runs of a Codex automation: its threads (Codex names each run's thread after the automation). */
+function codexRuns(name: string): Promise<RoutineRun[]> {
+  const sql = `select id, cwd, created_at_ms, rollout_path from threads where thread_source = 'automation' and name = '${name.replace(/'/g, "''")}'`;
+  return new Promise((resolve) =>
+    execFile("sqlite3", ["-json", "-readonly", join(homedir(), ".codex", "state_5.sqlite"), sql], { maxBuffer: 8 * 1024 * 1024 }, (err, out) => {
+      if (err || !out.trim()) return resolve([]);
+      try {
+        resolve((JSON.parse(out) as any[]).map((r) => ({ id: r.id, startedAt: r.created_at_ms, cwd: r.cwd, rolloutPath: r.rollout_path })));
+      } catch {
+        resolve([]);
+      }
+    }),
+  );
+}
+
+/** A routine's runs, newest first. */
+export async function routineRuns(r: Routine): Promise<RoutineRun[]> {
+  const runs = r.engine === "claude" ? await claudeRuns(r.id.replace(/^claude:/, "")) : await codexRuns(r.name);
+  return runs.sort((a, b) => b.startedAt - a.startedAt);
 }

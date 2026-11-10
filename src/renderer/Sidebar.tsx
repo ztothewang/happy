@@ -717,7 +717,17 @@ export function Sidebar(props: {
   const show = useSettings()?.show ?? { manager: true, cloud: true, tasks: true, email: true, calendar: true, terminal: true };
   const live = props.sessions.filter((s) => !isSystemSession(s) && !s.archived && ok(s));
   const archived = props.sessions.filter((s) => !isSystemSession(s) && s.archived && ok(s));
-  const ungrouped = live.filter((s) => !s.groupId || !props.groups.some((g) => g.id === s.groupId));
+  // Routine chats sit in their own section, not in General or a group.
+  const routines = live.filter((s) => s.routineId);
+  const chats = live.filter((s) => !s.routineId);
+  const ungrouped = chats.filter((s) => !s.groupId || !props.groups.some((g) => g.id === s.groupId));
+  const [routinesOpen, setRoutinesOpen] = useState(() => {
+    try {
+      return localStorage.getItem("happy.sidebar.routines") !== "0";
+    } catch {
+      return true;
+    }
+  });
 
   const [dragging, setDragging] = useState(false);
   useEffect(() => {
@@ -801,7 +811,7 @@ export function Sidebar(props: {
         {!filtering && <GridNav active={props.selected === GRID} onClick={() => props.onSelect(GRID)} />}
         <Group
           title="General"
-          bare={!props.groups.some((g) => live.some((x) => x.groupId === g.id))}
+          bare={!props.groups.some((g) => chats.some((x) => x.groupId === g.id)) && !routines.length}
           members={ungrouped}
           onDropSession={(id) => hub().moveToGroup(id, null)}
         >
@@ -810,7 +820,7 @@ export function Sidebar(props: {
         </Group>
 
         {props.groups.map((g) => {
-          const members = live.filter((s) => s.groupId === g.id);
+          const members = chats.filter((s) => s.groupId === g.id);
           // Empty groups stay out of the way; they show up as drop targets while you drag a chat.
           if (!members.length && (filtering || !dragging)) return null;
           return (
@@ -859,6 +869,22 @@ export function Sidebar(props: {
               + new group
             </button>
           )
+        )}
+
+        {routines.length > 0 && (
+          <Group
+            title="Routines"
+            members={routines}
+            collapsed={!routinesOpen && !filtering}
+            onToggle={() => {
+              setRoutinesOpen(!routinesOpen);
+              try {
+                localStorage.setItem("happy.sidebar.routines", routinesOpen ? "0" : "1");
+              } catch {}
+            }}
+          >
+            {routines.map(row)}
+          </Group>
         )}
 
         {archived.length > 0 && (

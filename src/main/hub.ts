@@ -26,6 +26,8 @@ import { checkPrompt, isCheckAnswer, parseCheck } from "./nextSteps.js";
 import { crossTenantGroups, landedOnMain, lastCommitSubject, projectErrors, tenantProjects } from "./overview.js";
 import { listProcesses, within } from "./processes.js";
 import { MediaStore } from "./media.js";
+import { readClaudeHistory } from "./importClaude.js";
+import { listRoutines, routineRuns } from "./routines.js";
 import { listCodexThreads, readCodexHistory } from "./importCodex.js";
 import { computeStats } from "./stats.js";
 import { refreshCodexPrices } from "./codexPrices.js";
@@ -34,6 +36,7 @@ import { createWorktree, dirtyPaths, removeWorktree } from "./worktree.js";
 import { Session, clip, type SessionHost } from "./session.js";
 import { deployedParts, isDeployed, isSystemSession } from "../shared/types.js";
 import type {
+  RoutineRun,
   ClaudePermissionMode,
   CloudSnapshot,
   EmailThread,
@@ -225,6 +228,7 @@ export class Hub implements SessionHost {
   private annotatedAt = 0;
   private annotating = false;
   private procTimer?: NodeJS.Timeout;
+  private routineTimer?: NodeJS.Timeout;
   private limitTimer?: NodeJS.Timeout;
   private gitChecked = new Map<string, number>();
   private gitWatch = new GitWatch();
@@ -295,6 +299,11 @@ export class Hub implements SessionHost {
     this.taskTimer = setInterval(() => {
       for (const scope of this.taskCache.keys()) void this.tasks(scope, true);
     }, 5 * 60_000);
+    // Routines run in the Claude and Codex apps; each gets a chat here showing its latest run.
+    if (!demo) {
+      setTimeout(() => void this.syncRoutines(), 12_000);
+      this.routineTimer = setInterval(() => void this.syncRoutines(), 5 * 60_000);
+    }
   }
 
   // ── SessionHost ────────────────────────────────────────────────
@@ -1471,6 +1480,82 @@ export class Hub implements SessionHost {
     return out;
   }
 
+  // ── routines ───────────────────────────────────────────────────
+  private syncingRoutines = false;
+
+  /** One chat per routine that has run: created on its first run, and moved to each new run while it follows the latest. */
+  async syncRoutines() {
+    if (this.syncingRoutines) return;
+    this.syncingRoutines = true;
+    try {
+      for (const r of listRoutines()) {
+        const runs = await routineRuns(r).catch(() => []);
+        const latest = runs[0];
+        if (!latest) continue;
+        const chat = [...this.sessions.values()].find((s) => s.meta.routineId === r.id);
+        if (!chat) await this.loadRoutineRun(undefined, r.id, r.name, r.engine, latest);
+        else if (!chat.meta.routineRunId && chat.meta.engineSessionId !== latest.id && chat.status === "idle")
+          await this.loadRoutineRun(chat, r.id, r.name, r.engine, latest);
+      }
+    } finally {
+      this.syncingRoutines = false;
+    }
+  }
+
+  /** Show one run in a routine's chat: its transcript, and replies continue that run's session. */
+  private async loadRoutineRun(old: Session | undefined, routineId: string, name: string, engine: "claude" | "codex", run: RoutineRun, pinned = false) {
+    const { items, dropped } = engine === "codex" && run.rolloutPath ? await readCodexHistory(run.rolloutPath) : await readClaudeHistory(run.id);
+    const when = new Date(run.startedAt).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    const head: TranscriptItem = {
+      id: `routine:${run.id}:note`,
+      kind: "system",
+      text: `${name} · run of ${when}${dropped ? ` · ${dropped} earlier items not shown` : ""}. Replies continue this run.`,
+      ts: items[0]?.ts ?? run.startedAt,
+    };
+    old?.dispose();
+    const b = settings().bypass.sessions;
+    const meta: SessionMeta = {
+      ...(old?.meta ?? {
+        id: randomUUID(),
+        engine,
+        title: name,
+        titleSource: "user" as const,
+        createdAt: run.startedAt,
+        permissionMode: engine === "claude" ? (b ? ("bypassPermissions" as const) : ("default" as const)) : undefined,
+        codexSandbox: engine === "codex" ? (b ? ("danger-full-access" as const) : ("workspace-write" as const)) : undefined,
+      }),
+      routineId,
+      routineRunId: pinned ? run.id : undefined,
+      cwd: existsSync(run.cwd) ? run.cwd : homedir(),
+      engineSessionId: run.id,
+      forkOf: undefined,
+      // Looking at an older run doesn't move the chat in the sidebar.
+      updatedAt: pinned && old ? old.meta.updatedAt : Math.max(run.startedAt, items.at(-1)?.ts ?? 0),
+    };
+    const s = this.instantiate(meta, [head, ...items]);
+    this.changed(s);
+    this.saveNow();
+    return s;
+  }
+
+  async routineRuns(id: string): Promise<RoutineRun[]> {
+    const s = this.get(id);
+    const r = listRoutines().find((x) => x.id === s.meta.routineId);
+    return r ? routineRuns(r) : [];
+  }
+
+  /** Switch a routine's chat to one of its runs (null = back to following the latest). */
+  async showRoutineRun(id: string, runId: string | null) {
+    const s = this.get(id);
+    const r = listRoutines().find((x) => x.id === s.meta.routineId);
+    if (!r) throw new Error("That routine is gone");
+    if (s.status !== "idle") throw new Error("Wait for the reply to finish first");
+    const runs = await routineRuns(r);
+    const run = runId ? runs.find((x) => x.id === runId) : runs[0];
+    if (!run) throw new Error("That run is gone");
+    await this.loadRoutineRun(s, r.id, r.name, r.engine, run, !!runId && run.id !== runs[0]?.id);
+  }
+
   list(): SessionState[] {
     return [...this.sessions.values()]
       .map((s) => s.snapshot())
@@ -1677,6 +1762,7 @@ export class Hub implements SessionHost {
     clearInterval(this.taskTimer);
     clearInterval(this.inboxTimer);
     clearInterval(this.procTimer);
+    clearInterval(this.routineTimer);
     this.saveNow();
     for (const s of this.sessions.values()) s.dispose();
   }

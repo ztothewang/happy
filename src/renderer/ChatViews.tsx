@@ -28,8 +28,9 @@ export function ChatWallView({ sessions, groups, onOpen, onGrid }: { sessions: S
   const picked = useGrid();
   const chats = live(sessions);
   const sections = [
-    { id: "", name: "General", members: chats.filter((s) => !s.groupId || !groups.some((g) => g.id === s.groupId)) },
-    ...groups.map((g) => ({ id: g.id, name: g.name, members: chats.filter((s) => s.groupId === g.id) })),
+    { id: "", name: "General", members: chats.filter((s) => !s.routineId && (!s.groupId || !groups.some((g) => g.id === s.groupId))) },
+    ...groups.map((g) => ({ id: g.id, name: g.name, members: chats.filter((s) => !s.routineId && s.groupId === g.id) })),
+    { id: "routines", name: "Routines", members: chats.filter((s) => s.routineId) },
   ]
     .filter((x) => x.members.length)
     .map((x) => ({ ...x, members: [...x.members].sort((a, b) => lastMessageAt(b) - lastMessageAt(a)) }));

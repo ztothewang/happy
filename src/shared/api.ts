@@ -82,6 +82,8 @@ export function makeApi(invoke: Invoke, listen: Listen, extras: { pathForFile(fi
   stats: (refresh, range) => invoke("hub:stats", refresh, range),
   linkPreview: (url) => invoke("link:preview", url),
   routines: () => invoke("routines:list"),
+  routineRuns: (id) => invoke("routines:runs", id),
+  showRoutineRun: (id, runId) => invoke("routines:show", id, runId),
   projectConfig: () => invoke("hub:projectConfig"),
   openInChrome: (url) => invoke("link:chrome", url),
   codexPrices: () => invoke("prices:get"),

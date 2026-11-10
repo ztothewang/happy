@@ -533,6 +533,8 @@ app.whenReady().then(async () => {
   });
   handle("link:preview", (url: string) => linkPreview(url));
   handle("routines:list", () => (demo ? (demo.routines ?? []) : listRoutines()));
+  handle("routines:runs", (id: string) => hub.routineRuns(id));
+  handle("routines:show", (id: string, runId: string | null) => hub.showRoutineRun(id, runId));
   handle("hub:projectConfig", () => projectConfig(settings().repo));
   handle("link:chrome", (url: string) => {
     if (!/^https?:\/\//i.test(url)) throw new Error("Only web links");
