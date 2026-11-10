@@ -234,7 +234,15 @@ export function ChatGridView({ sessions, onOpen, onBack, onWall }: { sessions: R
     if (!el) return;
     const ro = new ResizeObserver(() => setH(el.clientHeight));
     ro.observe(el);
-    return () => ro.disconnect();
+    // Shift + scroll moves the grid itself, wherever the cursor is (macOS turns it into a sideways scroll; use either axis).
+    const onWheel = (e: WheelEvent) => {
+      if (!e.shiftKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      el.scrollTop += Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    };
+    el.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    return () => (ro.disconnect(), el.removeEventListener("wheel", onWheel, { capture: true }));
   }, []);
   // A sidebar click on a chat that's in the grid scrolls to its card and flashes it.
   useEffect(() => {
