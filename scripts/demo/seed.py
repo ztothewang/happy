@@ -483,8 +483,15 @@ thread_details = {
 for t in inbox_threads[1:]:
     thread_details[t["id"]] = {**{k: v for k, v in t.items() if not k.startswith("_")}, "messages": [
         {"id": f"m-{t['id']}", "from": t["from"], "fromEmail": t["_email"], "fromMe": False, "to": "Maya Chen <maya@ledgerly.dev>", "cc": "", "date": t["date"], "text": t["snippet"], "attachments": [], "unread": t["unread"]}]}
+# A reply drafted earlier in Gmail, with formatting.
+thread_details["t2"]["draft"] = {
+    "id": "d-t2", "to": ["daniel@harborfit.co"], "cc": [], "subject": "Re: Pilot pricing for 40 locations", "from": "maya@ledgerly.dev",
+    "body": "Hi Daniel,\n\nAnnual billing works at that tier. For 40 locations:\n\n- Growth plan at $89 per location per month\n- Billed annually: $42,720\n- The first 30 days are free while you pilot\n\nI'll send the order form today.\n\nMaya",
+    "html": "<div style=\"font-family:Arial,sans-serif;font-size:14px\">Hi Daniel,<br><br>Annual billing works at that tier. For 40 locations:<ul><li><b>Growth plan</b> at $89 per location per month</li><li>Billed annually: <b>$42,720</b></li><li>The first 30 days are free while you pilot</li></ul>I'll send the order form today. The full breakdown is on our <a href=\"https://ledgerly.dev/pricing\">pricing page</a>.<br><br>Maya</div>",
+}
 demo["mail"] = {
     "email": "maya@ledgerly.dev",
+    "sendAs": [{"email": "maya@ledgerly.dev", "name": "Maya Chen", "isDefault": True}, {"email": "support@ledgerly.dev", "name": "Ledgerly Support", "isDefault": False}],
     "inbox": {"fetchedAt": MS(NOW), "query": "", "page": 0, "pageSize": 50, "threads": [{k: v for k, v in t.items() if not k.startswith("_")} for t in inbox_threads if not t["starred"]],
               "starred": [{k: v for k, v in t.items() if not k.startswith("_")} for t in inbox_threads if t["starred"]], "hasNext": False, "total": 38, "importantUnread": 2},
     "threads": thread_details,

@@ -1858,3 +1858,9 @@ pre.code { position: relative; }
 .limits { min-width: 0; overflow: hidden; flex-shrink: 1; }
 @media (max-width: 1400px) { .topbar .limits .lim-tok { display: none; } }
 @media (max-width: 1180px) { .topbar .limits .lim-eng:nth-child(3) { display: none; } }
+/* Mail reply box: From picker, and a formatted draft shown as it will send. */
+.em-from-row { padding-right: 36px; }
+.em-from-row select { flex: 0 1 auto; min-width: 0; font: 12.5px var(--f); background: none; border: 0; color: var(--fg); padding: 2px 0; }
+.em-draft-html { border: 1px solid var(--div); border-radius: 8px; overflow: hidden; }
+.em-draft-html .em-html { margin: 0; }
+.em-draft-html-acts { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 6px 10px; border-top: 1px solid var(--div); background: var(--side); }

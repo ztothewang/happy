@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import type { EmailAttachment, EmailMessage, EmailThread, EmailThreadDetail, GmailStatus } from "../shared/types.js";
+import type { EmailAttachment, EmailMessage, EmailSendAs, EmailThread, EmailThreadDetail, GmailStatus } from "../shared/types.js";
 
 const CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"];
 const CONTACT_SCOPES = [
@@ -283,6 +283,28 @@ export class Gmail {
     return this.cfg?.email ?? "";
   }
 
+  private aliases?: { at: number; list: EmailSendAs[] };
+
+  /** Addresses you can send as (Gmail's "Send mail as"), default first. */
+  async sendAs(): Promise<EmailSendAs[]> {
+    if (this.aliases && Date.now() - this.aliases.at < 10 * 60_000) return this.aliases.list;
+    const r = await this.api("/settings/sendAs").catch(() => ({ sendAs: [] }));
+    const list: EmailSendAs[] = (r.sendAs ?? [])
+      .filter((a: any) => a.isPrimary || a.verificationStatus === "accepted")
+      .map((a: any) => ({ email: a.sendAsEmail, name: a.displayName || undefined, isDefault: !!a.isDefault }))
+      .sort((a: EmailSendAs, b: EmailSendAs) => Number(b.isDefault) - Number(a.isDefault));
+    if (!list.length && this.me) list.push({ email: this.me, isDefault: true });
+    this.aliases = { at: Date.now(), list };
+    return list;
+  }
+
+  /** "Name <email>" for a From header: the alias's display name, else yours from Settings. */
+  private async fromHeader(email: string) {
+    const a = (await this.sendAs()).find((x) => x.email.toLowerCase() === email.toLowerCase());
+    const name = a?.name || settings().profile.name;
+    return name ? `${encodeHeader(`"${name.replace(/"/g, "")}"`)} <${email}>` : email;
+  }
+
   /** Inbox threads plus starred threads, newest first (starred ones the UI pins on top). */
   /** All thread ids (with historyId) matching a query, newest first, up to `cap`. */
   private async listAll(q: string, cap: number): Promise<Array<{ id: string; historyId: string }>> {
@@ -395,7 +417,8 @@ export class Gmail {
       const d = (list.drafts ?? []).find((x: any) => x.message?.id === draftMsg.id);
       if (d) {
         const emails = (h: string) => splitAddresses(header(draftMsg, h)).map((r) => parseAddress(r).email).filter(Boolean);
-        draft = { id: d.id, body: bodyOf(draftMsg.payload).text.trim(), to: emails("To"), cc: emails("Cc"), subject: header(draftMsg, "Subject") ?? "" };
+        const b = bodyOf(draftMsg.payload);
+        draft = { id: d.id, body: b.text.trim(), html: b.html, to: emails("To"), cc: emails("Cc"), subject: header(draftMsg, "Subject") ?? "", from: parseAddress(header(draftMsg, "From")).email || undefined };
       }
     }
     const messages: EmailMessage[] = (t.messages ?? []).filter((m: any) => !isDraft(m)).map((m: any) => {
@@ -483,26 +506,31 @@ export class Gmail {
     return { msgs, last };
   }
 
-  /** Reply-all recipients for the thread, minus you: { to, cc } as bare emails. */
-  async replyDefaults(threadId: string): Promise<{ to: string[]; cc: string[] }> {
+  /** Reply-all recipients for the thread, minus you: { to, cc } as bare emails, and which of your addresses to send from. */
+  async replyDefaults(threadId: string): Promise<{ to: string[]; cc: string[]; from?: string }> {
     const { last } = await this.replyContext(threadId);
     const me = this.me;
+    const mine = (await this.sendAs()).map((a) => a.email.toLowerCase());
     const lastFrom = parseAddress(header(last, "From"));
-    const seen = new Set<string>([me]);
+    // Reply from the address the mail was sent to (or the one you sent it from).
+    const from =
+      mine.find((e) => e === lastFrom.email.toLowerCase()) ??
+      [...splitAddresses(header(last, "To")), ...splitAddresses(header(last, "Cc"))].map((r) => parseAddress(r).email.toLowerCase()).find((e) => mine.includes(e));
+    const seen = new Set<string>([me, ...mine]);
     const take = (raws: string[]) =>
       raws
         .map((r) => parseAddress(r).email)
         .filter((e) => e && !seen.has(e) && (seen.add(e), true));
     const to = take([...splitAddresses(lastFrom.email === me ? header(last, "To") : header(last, "Reply-To") || header(last, "From")), ...splitAddresses(header(last, "To"))]);
     const cc = take(splitAddresses(header(last, "Cc")));
-    return { to, cc };
+    return { to, cc, from };
   }
 
   /**
    * Save a reply as a Gmail draft on the thread with the given recipients (emails; display names are added from
    * `names`). Returns the draft id; pass the previous id to replace it.
    */
-  async saveDraft(threadId: string, body: string, rcpt: { to: string[]; cc: string[] }, draftId?: string, names?: (email: string) => string | undefined, subjectOverride?: string): Promise<string> {
+  async saveDraft(threadId: string, body: string, rcpt: { to: string[]; cc: string[] }, draftId?: string, names?: (email: string) => string | undefined, subjectOverride?: string, from?: string, html?: string): Promise<string> {
     if (!rcpt.to.length && !rcpt.cc.length) throw new Error("Add at least one recipient");
     // No thread = a new email.
     const { msgs, last } = threadId ? await this.replyContext(threadId) : { msgs: [] as any[], last: undefined as any };
@@ -516,15 +544,21 @@ export class Gmail {
     const msgId = standalone ? undefined : header(last, "Message-ID");
     const refs = [last ? header(last, "References") : "", msgId].filter(Boolean).join(" ");
     const raw = [
+      // No From = Gmail's default send-as address.
+      ...(from ? [`From: ${await this.fromHeader(from)}`] : []),
       ...(rcpt.to.length ? [`To: ${rcpt.to.map(addr).join(", ")}`] : []),
       ...(rcpt.cc.length ? [`Cc: ${rcpt.cc.map(addr).join(", ")}`] : []),
       `Subject: ${encodeHeader(standalone || /^re:/i.test(subject) ? subject : `Re: ${subject}`)}`,
       ...(msgId ? [`In-Reply-To: ${msgId}`, `References: ${refs}`] : []),
       "MIME-Version: 1.0",
-      "Content-Type: text/plain; charset=UTF-8",
-      "Content-Transfer-Encoding: 8bit",
-      "",
-      body,
+      // A formatted draft keeps its HTML, with the text as the plain alternative.
+      ...(html
+        ? (() => {
+            const b = `happy-${randomBytes(8).toString("hex")}`;
+            const part = (type: string, content: string) => [`--${b}`, `Content-Type: ${type}; charset=UTF-8`, "Content-Transfer-Encoding: 8bit", "", content];
+            return [`Content-Type: multipart/alternative; boundary="${b}"`, "", ...part("text/plain", body), ...part("text/html", html), `--${b}--`];
+          })()
+        : ["Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", body]),
     ].join("\r\n");
     const payload = { message: { raw: b64url(Buffer.from(raw, "utf8")), ...(threadId ? { threadId } : {}) } };
     // Re-saving creates a fresh draft and removes Happy's previous one: editing a reply draft in place can detach it from the thread.

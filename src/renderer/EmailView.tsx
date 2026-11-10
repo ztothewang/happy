@@ -1,8 +1,8 @@
-import { Star } from "lucide-react";
+import { Star, X } from "lucide-react";
 import { num } from "./models";
 import DOMPurify from "dompurify";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { EmailAttachment, EmailMessage, EmailThread, EmailThreadDetail, GmailStatus, Inbox, SessionState, TriageRun, TriageVerdict } from "../shared/types";
+import type { EmailAttachment, EmailMessage, EmailSendAs, EmailThread, EmailThreadDetail, GmailStatus, Inbox, SessionState, TriageRun, TriageVerdict } from "../shared/types";
 import { MAIL_FOLDERS, NEW_EMAIL, mailFolder } from "../shared/types";
 import { SessionView } from "./SessionView";
 import { hub } from "./App";
@@ -187,6 +187,12 @@ function Reply({ thread, onSent }: { thread: EmailThreadDetail; onSent?(): void 
   const [subject, setSubject] = useState("");
   const [saved, setSaved] = useState<string>();
   const [confirmSend, setConfirmSend] = useState(false);
+  // Send as: your Gmail "Send mail as" addresses ("" = Gmail's default).
+  const [aliases, setAliases] = useState<EmailSendAs[]>([]);
+  const [from, setFrom] = useState("");
+  useEffect(() => void hub().emailSendAs().then(setAliases).catch(() => {}), []);
+  // A draft written with formatting (e.g. in Gmail) shows formatted and sends as it is, until you edit it as text.
+  const [asHtml, setAsHtml] = useState(false);
   useEffect(() => {
     setConfirmSend(false);
     setInstruction("");
@@ -199,25 +205,32 @@ function Reply({ thread, onSent }: { thread: EmailThreadDetail; onSent?(): void 
       setShowCc(d.cc.length > 0);
       setDraftId(d.id);
       setSubject(d.subject);
-      setSaved(JSON.stringify([d.to, d.cc, d.body, d.subject]));
+      setFrom(d.from ?? "");
+      setAsHtml(!!d.html);
+      setSaved(JSON.stringify([d.to, d.cc, d.body, d.subject, d.from ?? ""]));
       return;
     }
     setBody("");
     setDraftId(undefined);
     setSaved(undefined);
+    setAsHtml(false);
     setTo([]);
     setCc([]);
+    setFrom("");
     void hub()
       .emailReplyDefaults(thread.id)
       .then((r) => {
         setTo(r.to);
         setCc(r.cc);
         setShowCc(r.cc.length > 0);
+        setFrom(r.from ?? "");
       })
       .catch(() => {});
   }, [thread.id, thread.draft?.id]);
-  const snapshot = JSON.stringify(thread.draft ? [to, cc, body, subject] : [to, cc, body]);
+  const snapshot = JSON.stringify(thread.draft ? [to, cc, body, subject, from] : [to, cc, body, from]);
   const rcpt = { to, cc };
+  const fromArg = from || undefined;
+  const htmlArg = asHtml ? thread.draft?.html : undefined;
 
   const draft = async () => {
     setBusy("draft");
@@ -225,6 +238,7 @@ function Reply({ thread, onSent }: { thread: EmailThreadDetail; onSent?(): void 
       const text = await hub().emailDraft(thread.id, instruction, to);
       // New emails come back as "Subject: …" then the body.
       const m = !thread.id ? text.match(/^Subject:\s*(.+)\n+/i) : null;
+      setAsHtml(false);
       if (m) {
         setSubject(m[1].trim());
         setBody(text.slice(m[0].length).trim());
@@ -237,7 +251,7 @@ function Reply({ thread, onSent }: { thread: EmailThreadDetail; onSent?(): void 
   const save = async () => {
     setBusy("save");
     try {
-      setDraftId(await hub().emailSaveDraft(thread.id, body, rcpt, draftId, standalone ? subject : undefined));
+      setDraftId(await hub().emailSaveDraft(thread.id, body, rcpt, draftId, standalone ? subject : undefined, fromArg, htmlArg));
       setSaved(snapshot);
       toast("Saved to Gmail drafts");
     } catch (e) {
@@ -248,7 +262,7 @@ function Reply({ thread, onSent }: { thread: EmailThreadDetail; onSent?(): void 
   const send = async () => {
     setBusy("send");
     try {
-      const id = saved === snapshot && draftId ? draftId : await hub().emailSaveDraft(thread.id, body, rcpt, draftId, standalone ? subject : undefined);
+      const id = saved === snapshot && draftId ? draftId : await hub().emailSaveDraft(thread.id, body, rcpt, draftId, standalone ? subject : undefined, fromArg, htmlArg);
       await hub().emailSend(id);
       toast("Sent");
       setBody("");
@@ -265,6 +279,22 @@ function Reply({ thread, onSent }: { thread: EmailThreadDetail; onSent?(): void 
   return (
     <div className="em-reply">
       <div className="em-rcpts">
+        {aliases.length > 0 && (
+          <label className="em-subject em-from-row">
+            <span className="muted small">From</span>
+            {aliases.length > 1 ? (
+              <select value={from || aliases.find((a) => a.isDefault)?.email || ""} onChange={(e) => setFrom(aliases.find((a) => a.email === e.target.value)?.isDefault ? "" : e.target.value)}>
+                {aliases.map((a) => (
+                  <option key={a.email} value={a.email}>
+                    {a.name ? `${a.name} <${a.email}>` : a.email}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="small">{aliases[0].name ? `${aliases[0].name} <${aliases[0].email}>` : aliases[0].email}</span>
+            )}
+          </label>
+        )}
         <RecipientInput id="email-to" label="To" value={to} onChange={setTo} placeholder="add recipients" />
         {standalone && (
           <label className="em-subject">
@@ -293,7 +323,19 @@ function Reply({ thread, onSent }: { thread: EmailThreadDetail; onSent?(): void 
           {busy === "draft" ? "drafting…" : body ? "redraft with Claude" : "draft with Claude"}
         </button>
       </div>
+      {asHtml && thread.draft?.html ? (
+        <div className="em-draft-html">
+          <HtmlBody html={thread.draft.html} />
+          <div className="em-draft-html-acts">
+            <span className="muted small">formatted draft</span>
+            <button className="link-btn" onClick={() => setAsHtml(false)} title="Edit the draft's text (its formatting is dropped when you save)">
+              edit as text
+            </button>
+          </div>
+        </div>
+      ) : (
       <textarea id="email-body" value={body} onChange={(e) => setBody(e.target.value)} placeholder={thread.id ? "Reply…" : "Write your email…"} rows={body ? Math.min(14, body.split("\n").length + 2) : thread.id ? 3 : 8} />
+      )}
       <div className="em-reply-acts">
         <span className="muted small">{draftId ? (saved === snapshot ? "saved in Gmail drafts" : "edited since saving") : "not saved"}</span>
         <button className="kb" disabled={!body.trim() || !to.length || !!busy} onClick={() => void save()}>
@@ -414,11 +456,6 @@ function ThreadPane({ id, me, onArchive, onSpam, onStar, starred, onClose }: { i
     <div className="em-thread">
       <div className="em-thread-h stacked">
         <h2>{t.subject}</h2>
-        {onClose && (
-          <button className="icon-btn em-close" title="Close (Esc)" onClick={onClose}>
-            ×
-          </button>
-        )}
         <button className={`em-star big ${starred ? "on" : ""}`} onClick={onStar} title="Star (s)">
           <Star size={17} fill={starred ? "currentColor" : "none"} />
         </button>
@@ -461,6 +498,12 @@ function ThreadPane({ id, me, onArchive, onSpam, onStar, starred, onClose }: { i
             </button>
           );
         })()}
+        {/* Close sits in the panel's top-right corner, apart from the thread's actions. */}
+        {onClose && (
+          <button className="icon-btn em-close" title="Close (Esc)" aria-label="Close" onClick={onClose}>
+            <X size={15} />
+          </button>
+        )}
       </div>
       <div className="em-msgs" ref={scroller}>
         {t.messages.map((m) => {

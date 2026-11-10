@@ -214,6 +214,13 @@ export interface RoutineRun {
   rolloutPath?: string;
 }
 
+/** An address Gmail lets you send as. */
+export interface EmailSendAs {
+  email: string;
+  name?: string;
+  isDefault: boolean;
+}
+
 /** A link's preview card (Open Graph). */
 export interface LinkPreview {
   url: string;
@@ -654,7 +661,7 @@ export interface EmailAttachment {
 export interface EmailThreadDetail extends EmailThread {
   messages: EmailMessage[];
   /** Your saved draft on this thread (latest), opened in the reply box to edit or send. */
-  draft?: { id: string; body: string; to: string[]; cc: string[]; subject: string };
+  draft?: { id: string; body: string; to: string[]; cc: string[]; subject: string; html?: string; from?: string };
 }
 
 export interface Inbox {
@@ -1197,8 +1204,10 @@ export interface HubApi {
   /** Archive everything in the inbox; returns the number of messages archived. */
   emailArchiveAll(keepStarred: boolean): Promise<number>;
   emailDraft(threadId: string, instruction?: string, to?: string[]): Promise<string>;
-  emailReplyDefaults(threadId: string): Promise<{ to: string[]; cc: string[] }>;
-  emailSaveDraft(threadId: string, body: string, rcpt: { to: string[]; cc: string[] }, draftId?: string, subject?: string): Promise<string>;
+  emailReplyDefaults(threadId: string): Promise<{ to: string[]; cc: string[]; from?: string }>;
+  emailSaveDraft(threadId: string, body: string, rcpt: { to: string[]; cc: string[] }, draftId?: string, subject?: string, from?: string, html?: string): Promise<string>;
+  /** Addresses you can send as, default first. */
+  emailSendAs(): Promise<EmailSendAs[]>;
   contacts(): Promise<Contact[]>;
   emailSend(draftId: string): Promise<void>;
   /** Start a zero-inbox run (replaces the saved one). */

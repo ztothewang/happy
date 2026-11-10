@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import type { CalendarEvent, LinearIssue, EmailThreadDetail, Inbox, CloudSnapshot, EngineLimits, ErrorGroup, GcloudStatus, NextStep, Routine, SessionProcess, TenantErrors } from "../shared/types.js";
+import type { CalendarEvent, LinearIssue, EmailSendAs, EmailThreadDetail, Inbox, CloudSnapshot, EngineLimits, ErrorGroup, GcloudStatus, NextStep, Routine, SessionProcess, TenantErrors } from "../shared/types.js";
 
 /**
  * Demo mode (SESSION_HUB_DEMO=<demo.json>): Happy runs against a separate data folder with made-up sessions, and
@@ -22,7 +22,7 @@ export interface DemoData {
   status?: Record<string, "running" | "needs_permission">;
   processes?: Record<string, SessionProcess[]>;
   /** Mail: a made-up inbox and threads (nothing is sent, saved or archived). */
-  mail?: { email: string; inbox: Inbox; threads: Record<string, EmailThreadDetail>; drafts?: Record<string, string> };
+  mail?: { email: string; inbox: Inbox; threads: Record<string, EmailThreadDetail>; drafts?: Record<string, string>; sendAs?: EmailSendAs[] };
   /** Calendar events and Linear issues (made up). */
   calendar?: CalendarEvent[];
   linear?: { name: string; email: string; issues: LinearIssue[] };

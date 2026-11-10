@@ -424,7 +424,8 @@ app.whenReady().then(async () => {
   handle("email:archiveAll", (keepStarred: boolean) => hub.emailArchiveAll(keepStarred));
   handle("email:draft", (threadId: string, instruction?: string, to?: string[]) => (demo?.mail ? (demo.mail.drafts?.[threadId] ?? "") : hub.emailDraft(threadId, instruction, to)));
   handle("email:replyDefaults", (threadId: string) => (demo?.mail ? { to: [demo.mail.threads[threadId]?.messages.at(-1)?.fromEmail ?? ""].filter(Boolean), cc: [] } : hub.gmail.replyDefaults(threadId)));
-  handle("email:saveDraft", (threadId: string, body: string, rcpt, draftId?: string, subject?: string) => hub.gmail.saveDraft(threadId, body, rcpt, draftId, hub.contacts.nameFor, subject));
+  handle("email:saveDraft", (threadId: string, body: string, rcpt, draftId?: string, subject?: string, from?: string, html?: string) => hub.gmail.saveDraft(threadId, body, rcpt, draftId, hub.contacts.nameFor, subject, from, html));
+  handle("email:sendAs", () => (demo?.mail ? (demo.mail.sendAs ?? []) : hub.gmail.sendAs()));
   handle("contacts:list", () => hub.contacts.list());
   handle("email:send", async (draftId: string) => {
     await hub.gmail.sendDraft(draftId);
