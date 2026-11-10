@@ -11,7 +11,7 @@
 This new age of software development has taught me a few things:
 
 1. I have little patience for swapping between surfaces (Claude, Codex, Terminal, Cloud, Email, Tasks, etc.).
-2. Using Claude/Codex/Cursor in parallel, with multiple agents in each, makes it excruciatingly hard to manage sessions: tracking the status of each, making sure I've merged and deployed the changes, and remembering to run backfills. I often have around 20 agents running at once.
+2. Using Claude/Codex/Cursor in parallel, with multiple agents in each, makes it excruciatingly hard to manage sessions: tracking the status of each, making sure I've merged and deployed the changes, and remembering to run backfills.
 3. I constantly find myself repeating certain tasks. Checking cloud errors. Asking an agent to simplify its response. Scrolling between pinned messages. Asking it to read or draft emails.
 
 Happy is the product of all this: one place for coding agents, cloud, tasks and email, with chat built into UIs where UI is preferable. Session tools help track what's done and what's left. Macros handle the repetitive bits. And I can pick it all up from my phone.
@@ -49,7 +49,7 @@ Each session tracks its own worktrees. Worktrees created by the agent are added 
 
 #### Next steps
 
-When an agent finishes a reply, Happy asks it, out of sight, what you'd most likely want next. The answer shows up as 2 to 4 buttons under the reply, like "Run the tests" or "Deploy to staging". Click one to send it, or ignore them and type your own. The agent answers with the whole session in mind, not just its last message. The question and answer never show up in the chat.
+When an agent finishes a reply, Happy asks it, out of sight, what you'd most likely want next. The answer shows up as 2 to 4 buttons under the reply, like "Run the tests" or "Deploy to staging". Click one to send it, or ignore them and type your own.
 
 #### Tags
 
@@ -66,19 +66,12 @@ Happy keeps them up to date for you. After each reply, the agent checks the sess
 - One button to kill all processes an agent is running.
 - The top bar shows remaining usage and the API-equivalent cost of each session.
 
-<details>
-<summary><b>Session view with pinned messages and next steps</b></summary>
-
-<br>
-
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/sessions-dark.png">
     <img src="docs/screenshots/sessions-light.png" width="100%" alt="A session with pinned replies, automatic tags and suggested next steps">
   </picture>
 </div>
-
-</details>
 
 ### Manager
 
