@@ -628,12 +628,12 @@ export function TasksView({ sessions, onOpen }: { sessions: Record<string, Sessi
         <button className="tk-go" onClick={() => (setOpen(null), setCreating({}))}>
           + new
         </button>
-        <span className="muted mono small">
+        <span className="muted mono small bar-meta">
           {list ? `${num(rows.length)} open · ${urgent} urgent/high` : ""}
           {list?.error ? ` · ${list.error}` : ""}
         </span>
         <span className="tk-bar-right">
-          <span className="muted mono small">
+          <span className="muted mono small bar-meta bar-opt">
             {status.name} · {list?.fetchedAt ? `updated ${relTime(list.fetchedAt)}` : "loading…"}
           </span>
           <button

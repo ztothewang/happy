@@ -1838,3 +1838,23 @@ pre.code { position: relative; }
 .rr-row { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--fg); font: 12px var(--fm); text-align: left; cursor: pointer; }
 .rr-row:hover { background: var(--hover, var(--sel)); }
 .rr-row.on { background: var(--sel); }
+/* Page toolbars (Mail, Tasks, Calendar): always one line. Inputs shrink first, status text cuts off with "…",
+   then hides when the bar is narrow; buttons keep their size. */
+.tk-bar { flex-wrap: nowrap; white-space: nowrap; min-width: 0; container-type: inline-size; }
+.tk-bar > *, .tk-bar-right > * { flex-shrink: 0; }
+.tk-bar > .tk-bar-right { flex-shrink: 0; }
+.tk-bar .cal-ask input { min-width: 0; }
+.tk-bar > .tk-filter { width: auto; flex: 0 1 220px; min-width: 80px; }
+.tk-bar > .em-search { flex: 0 1 280px; min-width: 120px; }
+.tk-bar > .em-search .tk-filter { width: auto; flex: 1; min-width: 0; }
+.tk-bar > .cal-ask { flex: 1 1 260px; min-width: 150px; }
+.tk-bar .bar-meta { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@container (max-width: 1080px) { .tk-bar .bar-opt { display: none; } }
+@container (max-width: 820px) { .tk-bar .cal-ask button { display: none; } }
+.em-bulk { white-space: nowrap; }
+.em-bulk > * { flex-shrink: 0; }
+/* Top bar: the folder name never truncates; plan usage drops its token counts, then Cursor, as the window narrows. */
+.crumb { flex-shrink: 0; }
+.limits { min-width: 0; overflow: hidden; flex-shrink: 1; }
+@media (max-width: 1400px) { .topbar .limits .lim-tok { display: none; } }
+@media (max-width: 1180px) { .topbar .limits .lim-eng:nth-child(3) { display: none; } }

@@ -809,7 +809,7 @@ export function EmailView({ sessions }: { sessions: Record<string, SessionState>
             </button>
           ))}
         </span>
-        <span className="muted mono small">
+        <span className="muted mono small bar-meta">
           {inbox
             ? folder === "inbox"
               ? `${num(inbox.importantUnread)} important unread · ${num(inbox.total)} in inbox`
@@ -837,9 +837,10 @@ export function EmailView({ sessions }: { sessions: Record<string, SessionState>
           <button className="tk-go" onClick={() => (setComposing(true), setSel(null), setZero(false))} title="Write a new email">
             new email
           </button>
-          <span className="muted mono small">{status.email}</span>
+          <span className="muted mono small bar-meta bar-opt">{status.email}</span>
           <button
             className="kb"
+            title={status.email ? `Refresh ${status.email}` : "Refresh"}
             disabled={busy}
             onClick={async () => {
               setBusy(true);
@@ -875,6 +876,7 @@ export function EmailView({ sessions }: { sessions: Record<string, SessionState>
                 type="checkbox"
                 className="em-check"
                 aria-label="Select all on this page"
+                title="Select all · x toggles a thread · shift-click selects a range"
                 checked={pageAll || allInbox}
                 onChange={() => {
                   setAllInbox(false);
@@ -900,7 +902,7 @@ export function EmailView({ sessions }: { sessions: Record<string, SessionState>
                   )}
                 </>
               ) : (
-                <span className="muted">select · x toggles · shift-click for a range</span>
+                <span className="muted">select</span>
               )}
               {!allInbox && ordered.some((t) => !t.starred) && (
                 <button
