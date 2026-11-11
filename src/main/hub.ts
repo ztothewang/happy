@@ -332,7 +332,7 @@ export class Hub implements SessionHost {
     if (!prompt || isSystemSession(s.meta) || s.meta.archived || s.pending || s.queued.length) return;
     // A chat waiting on background work isn't done: Claude Code wakes the agent when that work ends, and a hidden
     // message arriving then aborts its turn ("stopped partway"). Its next real idle gets checked instead.
-    if (s.hasLiveTasks) return;
+    if (s.hasLiveTasks || !s.turnSettled) return;
     if (!last || last.kind !== "assistant" || isCheckAnswer(last.text) || s.nextStepsFor === last.id || this.suggesting.has(s.id)) return;
     // Fresh replies only: not every old chat when Happy starts.
     if (Date.now() - (last.ts ?? 0) > 10 * 60_000) return;
@@ -352,7 +352,7 @@ export class Hub implements SessionHost {
       const at = last.id;
       setTimeout(() => {
         this.settling.delete(s.id);
-        if (this.sessions.has(s.id) && s.status === "idle" && !s.hasLiveTasks && !s.queued.length && [...s.items].reverse().find((i) => i.kind !== "system" && i.kind !== "tags")?.id === at)
+        if (this.sessions.has(s.id) && s.status === "idle" && !s.hasLiveTasks && s.turnSettled && !s.queued.length && [...s.items].reverse().find((i) => i.kind !== "system" && i.kind !== "tags")?.id === at)
           void this.suggestNext(s, true);
       }, 4000);
       return;

@@ -253,6 +253,9 @@ export class ClaudeSession extends Session {
   }
 
   private handle(msg: SDKMessage) {
+    // Anything the agent does counts as activity; only the result message ends a turn (see turnSettled).
+    if (msg.type === "result") this.turnEndedAt = Date.now();
+    else if (msg.type === "assistant" || msg.type === "user" || msg.type === "stream_event" || msg.type === "tool_progress") this.activityAt = Date.now();
     // Subagent traffic is summarized by the parent's Agent tool item; skip the inner chatter.
     if ("parent_tool_use_id" in msg && msg.parent_tool_use_id) return;
 

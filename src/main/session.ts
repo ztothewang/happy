@@ -158,13 +158,25 @@ export abstract class Session {
    * showing as idle. Messages you send meanwhile queue and go right after.
    */
   private hiddenTurn?: { texts: Map<string, string>; failed?: boolean; done(text: string | undefined): void };
+  /**
+   * When the engine last reported a turn as over (Claude: its result message) and when it last did anything (a message,
+   * a tool call). Hidden checks need the first to be newer: Claude's "idle" signal also fires mid-turn, and a message
+   * arriving mid-turn makes Claude Code reject the pending tool call ("stopped partway"). Engines without mid-turn
+   * idle signals leave both at 0.
+   */
+  turnEndedAt = 0;
+  activityAt = 0;
+  get turnSettled() {
+    return this.turnEndedAt >= this.activityAt;
+  }
+
   /** Background work the agent started (shells, subagents) is still running: the agent may wake up on its own when it ends. */
   get hasLiveTasks() {
     return [...this.tasks.values()].some((t) => !t.status || t.status === "running" || t.status === "pending" || t.status === "paused");
   }
 
   askHidden(prompt: string, timeoutMs = 90_000): Promise<string | undefined> {
-    if (this.status !== "idle" || this.hiddenTurn || this.held || this.hasLiveTasks) return Promise.resolve(undefined);
+    if (this.status !== "idle" || this.hiddenTurn || this.held || this.hasLiveTasks || !this.turnSettled) return Promise.resolve(undefined);
     return new Promise((resolve) => {
       const finish = (text: string | undefined) => {
         clearTimeout(timer);
