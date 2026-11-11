@@ -100,6 +100,8 @@ function toolResultText(content: unknown): string {
 
 const FILE_TOOLS = new Set(["Read", "Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
+let modelsAsked = false;
+
 export class ClaudeSession extends Session {
   protected steers = true;
 
@@ -226,6 +228,15 @@ export class ClaudeSession extends Session {
       },
     });
     void this.pump(this.q);
+    // The models your account can use, for the pickers (once per launch is plenty).
+    if (!modelsAsked) {
+      modelsAsked = true;
+      const q = this.q;
+      void q
+        .supportedModels()
+        .then((list) => this.host.learnClaudeModels?.(list))
+        .catch(() => (modelsAsked = false));
+    }
   }
 
   private async pump(q: Query) {

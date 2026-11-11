@@ -1135,6 +1135,8 @@ export interface HubApi {
   codexPrices(): Promise<Record<string, { input: number; cached: number; output: number }>>;
   refreshCodexPrices(): Promise<boolean>;
   linkPreview(url: string): Promise<LinkPreview | null>;
+  /** Claude models your account can use, as Claude Code last reported them (empty = not known yet). */
+  claudeModels(): Promise<Array<{ id: string; label: string }>>;
   routines(): Promise<Routine[]>;
   /** A routine chat's runs, newest first. */
   routineRuns(id: string): Promise<RoutineRun[]>;

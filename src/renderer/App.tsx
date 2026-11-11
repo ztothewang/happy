@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isSystemSession } from "../shared/types";
 import type { BrowserState, EngineLimits, HubApi, SessionGroup, SessionState, UsageTotals } from "../shared/types";
 import { MenuProvider } from "./Menu";
-import { CLAUDE_MODELS, PERMISSION_MODES, lastMessageAt } from "./models";
+import { CLAUDE_MODELS, PERMISSION_MODES, lastMessageAt, setClaudeModels } from "./models";
 import { NewChat } from "./NewChat";
 import { TerminalView } from "./TerminalView";
 import { StatsView } from "./StatsView";
@@ -159,6 +159,10 @@ function Shell() {
     hub().groups().then(setGroups);
     hub().usageToday().then(setUsage);
     hub().limits().then(setLimits);
+    // Claude's model list for your account (known once a Claude chat has run); re-read now and then.
+    const models = () => void hub().claudeModels().then(setClaudeModels).catch(() => {});
+    models();
+    const modelTimer = setInterval(models, 10 * 60_000);
     const offs = [
       hub().onGroups(setGroups),
       hub().onUsage(setUsage),
@@ -200,7 +204,7 @@ function Shell() {
         }),
       ),
     ];
-    return () => offs.forEach((off) => off());
+    return () => (clearInterval(modelTimer), offs.forEach((off) => off()));
   }, []);
 
   const ordered = useMemo(

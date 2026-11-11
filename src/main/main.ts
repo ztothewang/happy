@@ -276,6 +276,7 @@ app.whenReady().then(async () => {
   handle("hub:setPermissionMode", (id: string, mode) => hub.setPermissionMode(id, mode));
   handle("hub:respondPermission", (requestId: string, decision, extra) => hub.respondPermission(requestId, decision, extra));
   handle("hub:listClaudeSessions", () => hub.listClaudeSessions());
+  handle("claude:models", () => (demo ? [] : hub.claudeModels()));
   handle("hub:saveAttachment", (dataUrl: string) => hub.media.saveDataUrl(dataUrl));
   handle("hub:readFile", (path: string) => readFileForPreview(path));
   handle("fs:list", (root: string) => listFiles(root));

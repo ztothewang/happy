@@ -599,6 +599,8 @@ export function SessionView({
                   deny D
                 </button>
               </div>
+              {/* Why it asks (Claude's own reason): bypass still asks for its safety checks, e.g. sensitive files. */}
+              {s.pending.reason && <div className="ask-why muted small">{s.pending.reason.replace(/\x1b\[[0-9;]*m/g, "")}</div>}
             </div>
           </div>
         )}

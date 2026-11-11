@@ -3,7 +3,7 @@ import { stageLabel } from "../Sidebar";
 import { useEffect, useMemo, useState } from "react";
 import type { CloudSnapshot, Inbox, SessionGroup, SessionState } from "../../shared/types";
 import { hub } from "../App";
-import { lastMessageAt } from "../models";
+import { lastMessageAt, setClaudeModels } from "../models";
 import { useSettings } from "../settings";
 import { SettingsView } from "../SettingsView";
 import { MCal, MMail } from "./MMail";
@@ -23,6 +23,7 @@ function ChatsTab({ sessions, onOpen, onNew, onSettings, onArchived }: { session
   const [groups, setGroups] = useState<SessionGroup[]>([]);
   useEffect(() => {
     void hub().groups().then(setGroups);
+    void hub().claudeModels().then(setClaudeModels).catch(() => {});
     return hub().onGroups(setGroups);
   }, []);
   const n = q.trim().toLowerCase();

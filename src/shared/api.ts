@@ -42,6 +42,7 @@ export function makeApi(invoke: Invoke, listen: Listen, extras: { pathForFile(fi
   pickFile: (cwd) => invoke("hub:pickFile", cwd),
   pickFiles: (cwd) => invoke("hub:pickFiles", cwd),
   listClaudeSessions: () => invoke("hub:listClaudeSessions"),
+  claudeModels: () => invoke("claude:models"),
   saveAttachment: (dataUrl) => invoke("hub:saveAttachment", dataUrl),
   pathForFile: (file) => extras.pathForFile(file),
   readFile: (path) => invoke("hub:readFile", path),

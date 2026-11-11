@@ -1864,3 +1864,4 @@ pre.code { position: relative; }
 .em-draft-html { border: 1px solid var(--div); border-radius: 8px; overflow: hidden; }
 .em-draft-html .em-html { margin: 0; }
 .em-draft-html-acts { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 6px 10px; border-top: 1px solid var(--div); background: var(--side); }
+.ask-why { margin-top: 4px; white-space: normal; }

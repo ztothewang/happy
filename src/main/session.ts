@@ -72,6 +72,10 @@ export interface SessionHost {
   media: MediaStore;
   /** Where a session continues when its own folder is gone (the main repo). */
   fallbackCwd(): string;
+  /** Claude Code's model list for your account, from a live session (cached for the pickers). */
+  learnClaudeModels?(list: Array<{ value: string; displayName: string; resolvedModel?: string }>): void;
+  /** Every permission prompt, for "why does it keep asking?". */
+  logPermission?(session: Session, tool: string, input: Record<string, unknown>, reason?: string): void;
 }
 
 /** Engine-agnostic session: owns transcript + status; engines fill it in. */
@@ -403,6 +407,7 @@ export abstract class Session {
   protected askPermission(tool: string, input: Record<string, unknown>, reason: string | undefined, signal: AbortSignal) {
     const requestId = randomUUID();
     this.pending = { requestId, sessionId: this.id, tool, input, reason };
+    this.host.logPermission?.(this, tool, input, reason);
     this.setStatus("needs_permission");
     return new Promise<{ decision: PermissionDecision; extra?: PermissionExtra }>((resolve) => {
       const done = (d: PermissionDecision, extra?: PermissionExtra) => {

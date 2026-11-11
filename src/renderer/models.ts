@@ -1,5 +1,6 @@
 import type { ClaudePermissionMode, Engine } from "../shared/types";
 
+/** Claude models for the pickers: Claude Code's own list for your account once known (see useClaudeModels), else these. */
 export const CLAUDE_MODELS: Array<{ id: string | null; label: string }> = [
   { id: null, label: "Default" },
   { id: "claude-opus-5-5", label: "Opus 5.5" },
@@ -7,6 +8,12 @@ export const CLAUDE_MODELS: Array<{ id: string | null; label: string }> = [
   { id: "claude-haiku-5-5", label: "Haiku 5.5" },
   { id: "claude-fable-5-1", label: "Fable 5.1" },
 ];
+
+/** Swap in the live list (in place, so every picker sees it). */
+export function setClaudeModels(live: Array<{ id: string; label: string }>) {
+  if (!live.length) return;
+  CLAUDE_MODELS.splice(0, CLAUDE_MODELS.length, { id: null, label: "Default" }, ...live);
+}
 
 export function modelLabel(engine: Engine, model?: string | null): string {
   if (!model) return "Default";

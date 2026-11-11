@@ -385,6 +385,38 @@ export class Hub implements SessionHost {
   private checkLater = new Set<string>();
   private settling = new Set<string>();
   /** One line per next-steps check, in next-steps.log next to Happy's state (for "why didn't I get buttons?"). */
+  learnClaudeModels(list: Array<{ value: string; displayName: string; resolvedModel?: string }>) {
+    // Full ids (not aliases like "opus"), so chats that saved one match their row; one row per model.
+    const seen = new Set<string>();
+    const models = list
+      .filter((m) => m.value && m.value !== "default")
+      .map((m) => ({ id: m.resolvedModel || m.value, label: m.displayName || m.value }))
+      .filter((m) => !seen.has(m.id) && (seen.add(m.id), true));
+    if (!models.length) return;
+    try {
+      writeFileSync(join(dirname(this.file), "claude-models.json"), JSON.stringify(models, null, 2));
+    } catch {}
+  }
+
+  /** Claude Code's model list as last reported (empty until a Claude chat has run once). */
+  claudeModels(): Array<{ id: string; label: string }> {
+    try {
+      return JSON.parse(readFileSync(join(dirname(this.file), "claude-models.json"), "utf8"));
+    } catch {
+      return [];
+    }
+  }
+
+  logPermission(s: Session, tool: string, input: Record<string, unknown>, reason?: string) {
+    try {
+      const arg = typeof input.command === "string" ? input.command : typeof input.file_path === "string" ? input.file_path : JSON.stringify(input);
+      appendFileSync(
+        join(dirname(this.file), "permissions.log"),
+        `${new Date().toISOString()} ${s.meta.engine} mode=${s.meta.permissionMode ?? s.meta.codexSandbox ?? s.meta.cursorMode ?? "default"} "${s.meta.title.slice(0, 60)}" ${tool} ${arg.slice(0, 200).replace(/\s+/g, " ")}${reason ? ` | ${reason.replace(/\s+/g, " ").slice(0, 300)}` : ""}\n`,
+      );
+    } catch {}
+  }
+
   private logCheck(s: Session, what: string, started: number) {
     try {
       const f = join(dirname(this.file), "next-steps.log");
