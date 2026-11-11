@@ -160,7 +160,7 @@ export abstract class Session {
   private hiddenTurn?: { texts: Map<string, string>; failed?: boolean; done(text: string | undefined): void };
   /**
    * When the engine last reported a turn as over (Claude: its result message) and when it last did anything (a message,
-   * a tool call). Hidden checks need the first to be newer: Claude's "idle" signal also fires mid-turn, and a message
+   * a tool call, a turn starting, a background task ending, which wakes the agent for a turn of its own). Hidden checks need the first to be newer: Claude's "idle" signal also fires mid-turn, and a message
    * arriving mid-turn makes Claude Code reject the pending tool call ("stopped partway"). Engines without mid-turn
    * idle signals leave both at 0.
    */

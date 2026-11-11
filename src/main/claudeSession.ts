@@ -269,7 +269,7 @@ export class ClaudeSession extends Session {
           }
           if (!this.meta.model) this.meta.model = msg.model;
         } else if (msg.subtype === "session_state_changed") {
-          if (msg.state === "running") this.setStatus("running");
+          if (msg.state === "running") (this.activityAt = Date.now()), this.setStatus("running");
           else if (msg.state === "idle" && this.status !== "needs_permission") this.setStatus("idle");
         } else if (msg.subtype === "background_tasks_changed") {
           // Authoritative list of live background tasks (shells, subagents, monitors); skip ambient watchers.
@@ -279,6 +279,8 @@ export class ClaudeSession extends Session {
             const prev = this.tasks.get(t.task_id);
             live.set(t.task_id, { id: t.task_id, label: t.description, kind: t.task_type, status: prev?.status ?? "running", startedAt: prev?.startedAt ?? Date.now() });
           }
+          // A background task that just ended wakes the agent for a turn of its own: that counts as activity.
+          if ([...this.tasks.keys()].some((id) => !live.has(id))) this.activityAt = Date.now();
           this.tasks = live;
           this.touch();
         } else if (msg.subtype === "task_started") {
@@ -291,11 +293,13 @@ export class ClaudeSession extends Session {
           const m = msg as any;
           const t = this.tasks.get(m.task_id);
           if (t && m.patch?.status) {
+            if (!["running", "pending", "paused"].includes(m.patch.status)) this.activityAt = Date.now();
             t.status = m.patch.status;
             this.touch();
           }
         } else if (msg.subtype === "task_notification") {
           const m = msg as any;
+          this.activityAt = Date.now();
           if (this.tasks.delete(m.task_id)) this.touch();
         } else if (msg.subtype === "compact_boundary") {
           this.addItem({ kind: "system", text: "Conversation compacted" });
