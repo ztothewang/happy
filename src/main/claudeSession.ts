@@ -19,11 +19,13 @@ class InputQueue implements AsyncIterable<SDKUserMessage> {
   private waiter?: (r: IteratorResult<SDKUserMessage>) => void;
   private closed = false;
 
-  push(content: SDKUserMessage["message"]["content"]) {
+  /** `later`: wait for any turn in progress (including one the agent starts on its own) instead of interrupting it. */
+  push(content: SDKUserMessage["message"]["content"], priority?: SDKUserMessage["priority"]) {
     const msg: SDKUserMessage = {
       type: "user",
       message: { role: "user", content },
       parent_tool_use_id: null,
+      ...(priority ? { priority } : {}),
     } as SDKUserMessage;
     if (this.waiter) {
       const w = this.waiter;
@@ -456,6 +458,14 @@ export class ClaudeSession extends Session {
       })),
       ...(text ? [{ type: "text" as const, text }] : []),
     ]);
+  }
+
+  /** Hidden checks queue behind whatever the agent is doing, so they can never cut a turn off. */
+  protected async sendHidden(prompt: string) {
+    this.lastError = undefined;
+    if (!this.q) this.start();
+    this.setStatus("running");
+    this.input!.push(prompt, "later");
   }
 
   async interrupt() {

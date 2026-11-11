@@ -175,6 +175,11 @@ export abstract class Session {
     return [...this.tasks.values()].some((t) => !t.status || t.status === "running" || t.status === "pending" || t.status === "paused");
   }
 
+  /** How a hidden check reaches the agent (engines that can queue it behind a running turn override this). */
+  protected sendHidden(prompt: string): Promise<void> {
+    return this.send(prompt, undefined, undefined, false);
+  }
+
   askHidden(prompt: string, timeoutMs = 90_000): Promise<string | undefined> {
     if (this.status !== "idle" || this.hiddenTurn || this.held || this.hasLiveTasks || !this.turnSettled) return Promise.resolve(undefined);
     return new Promise((resolve) => {
@@ -189,7 +194,7 @@ export abstract class Session {
         this.touch();
       }, timeoutMs);
       this.hiddenTurn = { texts: new Map(), done: finish };
-      this.send(prompt, undefined, undefined, false).catch(() => finish(undefined));
+      this.sendHidden(prompt).catch(() => finish(undefined));
     });
   }
 
@@ -329,7 +334,10 @@ export abstract class Session {
       // Engines can report "idle" for the turn that just ended after the hidden one has started; only the hidden
       // turn's own end (it answered, or failed) counts.
       if (!h.texts.size && !h.failed) return;
-      h.done([...h.texts.values()].join("\n").trim() || undefined);
+      const said = [...h.texts.values()].join("\n").trim();
+      // Not the check's answer: the agent ran a turn of its own first (the check waits behind it). Show it.
+      if (said && !isCheckAnswer(said)) return this.releaseHidden(status);
+      h.done(said || undefined);
       if (status === "idle" && this.queued.length && !this.holdFlush) setTimeout(() => this.flushQueued(), 0);
       const waiters = this.idleWaiters;
       this.idleWaiters = [];
@@ -363,14 +371,18 @@ export abstract class Session {
   protected addItem(item: Omit<TranscriptItem, "id" | "ts"> & { id?: string }) {
     const full: TranscriptItem = { id: item.id ?? randomUUID(), ts: Date.now(), ...item };
     if (this.hiddenTurn) {
-      if (full.kind === "assistant") this.hiddenTurn.texts.set(full.id, full.text);
-      // It should only answer; if it starts using tools, stop the turn rather than let it act out of sight.
-      if (full.kind === "tool") {
-        this.hiddenTurn.failed = true;
-        void this.stopTurn().catch(() => {});
+      if (full.kind === "assistant") {
+        this.hiddenTurn.texts.set(full.id, full.text);
+        return full;
       }
-      if (full.kind === "error") this.hiddenTurn.failed = true;
-      return full;
+      if (full.kind === "error") {
+        this.hiddenTurn.failed = true;
+        return full;
+      }
+      // A tool call isn't the check answering (it's told not to use tools): it's the agent's own turn running
+      // ahead of the queued check. Show that turn as usual instead of hiding it.
+      if (full.kind === "tool") this.releaseHidden("running");
+      else return full;
     }
     // Never show a next-steps answer as a reply (e.g. one that arrived after its hidden turn timed out).
     if (full.kind === "assistant" && isCheckAnswer(full.text)) return full;
@@ -378,6 +390,24 @@ export abstract class Session {
     if (this.items.length > MAX_ITEMS) this.items.splice(0, this.items.length - MAX_ITEMS);
     this.touch();
     return full;
+  }
+
+  /** Leave hidden mode without an answer and put what it captured back in the chat (it was a real turn). */
+  private releaseHidden(status: SessionStatus) {
+    const h = this.hiddenTurn;
+    if (!h) return;
+    this.hiddenTurn = undefined;
+    for (const [id, text] of h.texts) if (!isCheckAnswer(text)) this.items.push({ id, kind: "assistant", text, ts: Date.now() });
+    h.done(undefined);
+    // Back to normal status handling (an idle end flushes queued messages and wakes waiters).
+    if (status === "running") {
+      this.status = "running";
+      this.turnStartedAt ??= Date.now();
+      this.touch();
+    } else {
+      this.status = "running";
+      this.setStatus(status);
+    }
   }
 
   protected upsertItem(id: string, patch: Omit<TranscriptItem, "id" | "ts">) {
