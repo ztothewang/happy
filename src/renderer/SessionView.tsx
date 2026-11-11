@@ -347,25 +347,24 @@ const ItemLine = memo(function ItemLine({
   }
 });
 
-/** An engine error: plain title + what to do, raw text behind "details". */
+/** An engine error or interruption: one red line; the hint and raw text open on click. */
 function ErrorLine({ it, ts }: { it: TranscriptItem; ts: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [title, ...rest] = it.text.split("\n");
+  const hint = rest.join("\n").trim();
+  const raw = it.detail && it.detail !== it.text ? it.detail : "";
+  const more = !!(hint || raw);
   return (
     <div className="ln err">
       {ts}
       <span className="who">!</span>
-      <div className="body err-card">
-        <div className="err-title">{title}</div>
-        {rest.length > 0 && <div className="err-hint">{rest.join("\n")}</div>}
-        {it.detail && it.detail !== it.text && (
-          <>
-            <button className="link-btn err-more" onClick={() => setOpen(!open)}>
-              {open ? "hide details" : "details"}
-            </button>
-            {open && <pre className="err-raw">{it.detail}</pre>}
-          </>
-        )}
+      <div className="body err-line">
+        <button className="err-title" disabled={!more} onClick={() => setOpen(!open)}>
+          {title}
+          {more && <span className="err-caret">{open ? "▾" : "▸"}</span>}
+        </button>
+        {open && hint && <div className="err-hint">{hint}</div>}
+        {open && raw && <pre className="err-raw">{raw}</pre>}
       </div>
     </div>
   );
@@ -437,6 +436,24 @@ export function SessionView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  // Ctrl+C stops the running turn (Cmd+C still copies).
+  useEffect(() => {
+    if (!busy) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.metaKey || e.altKey || (e.key !== "c" && e.key !== "C")) return;
+      // With several chats on screen (grid, wall), only the one you're focused in stops.
+      const host = scroller.current?.closest(".log-wrap")?.parentElement;
+      const el = document.activeElement;
+      const mine = el && el !== document.body ? !!host?.contains(el) : document.querySelectorAll(".log-wrap").length === 1;
+      if (mine) {
+        e.preventDefault();
+        void hub().interrupt(s.id);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, s.id]);
 
   const commands: SlashCommand[] = [
     {
