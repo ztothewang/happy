@@ -86,10 +86,10 @@ function AddTodo({ s, autoFocus }: { s: SessionState; autoFocus?: boolean }) {
       <div className="td-add-row">
         <div className="td-seg">
           <button className={kind === "reminder" ? "on" : ""} onClick={() => setKind("reminder")}>
-            <Bell size={11} /> reminder
+            reminder
           </button>
           <button className={kind === "followup" ? "on" : ""} onClick={() => setKind("followup")}>
-            <ListChecks size={11} /> follow-up
+            follow-up
           </button>
         </div>
         {kind === "reminder" && (

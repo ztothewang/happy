@@ -438,7 +438,7 @@ export function CalendarView() {
   const label =
     view === "day"
       ? anchor.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })
-      : `${days[0].toLocaleDateString([], { month: "short", day: "numeric" })} – ${days[6].toLocaleDateString([], { month: days[0].getMonth() === days[6].getMonth() ? undefined : "short", day: "numeric", year: "numeric" })}`;
+      : `${days[0].toLocaleDateString([], { month: "short", day: "numeric" })} – ${days[0].getMonth() === days[6].getMonth() ? days[6].getDate() : days[6].toLocaleDateString([], { month: "short", day: "numeric" })}, ${days[6].getFullYear()}`;
   const step = view === "week" ? 7 : 1;
   const allDay = (d: Date) => (events ?? []).filter((e) => e.allDay && parseStart(e) <= d && parseEnd(e) > d);
   const timed = (d: Date) => (events ?? []).filter((e) => !e.allDay && sameDay(parseStart(e), d));
@@ -478,7 +478,7 @@ export function CalendarView() {
           </button>
         </form>
         <button className="tk-go" onClick={() => compose(blankDraft(new Date(Math.ceil(Date.now() / 1_800_000) * 1_800_000)))}>
-          + new
+          new
         </button>
       </div>
       <div className="cal-split">

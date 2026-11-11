@@ -1,4 +1,4 @@
-import { Copy, Pin } from "lucide-react";
+import { Pin } from "lucide-react";
 import { QueuedMessages, TodoFloat } from "./Todos";
 import { RoutineRunsFloat } from "./RoutineRuns";
 import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -196,7 +196,7 @@ function CopyBtn({ text }: { text: string }) {
         })
       }
     >
-      <Copy size={11} /> {done ? "copied" : "copy"}
+      {done ? "copied" : "copy"}
     </button>
   );
 }
@@ -247,7 +247,7 @@ function AssistantBody({ it, onSimplify, onPin, onWtf, onStatus }: { it: Transcr
       )}
       {onPin && (
         <button className={`pin-btn ${it.pinned ? "on" : ""}`} onClick={() => onPin(!it.pinned)} title={it.pinned ? "Unpin" : "Pin this reply (see it in the Pinned pane)"}>
-          <Pin size={11} /> {it.pinned ? "pinned" : "pin"}
+          {it.pinned ? "pinned" : "pin"}
         </button>
       )}
       <CopyBtn text={it.text} />

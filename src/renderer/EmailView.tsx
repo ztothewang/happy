@@ -893,7 +893,7 @@ export function EmailView({ sessions }: { sessions: Record<string, SessionState>
           >
             {busy ? "refreshing…" : "refresh"}
           </button>
-          <button className="tk-go" onClick={() => (setChatOpen(true), void hub().emailAsk(ZERO_INBOX))} disabled={!inbox?.total} title="Runs in the Mail chat">
+          <button className="kb" onClick={() => (setChatOpen(true), void hub().emailAsk(ZERO_INBOX))} disabled={!inbox?.total} title="Runs in the Mail chat">
             zero inbox
           </button>
           {!chatShown && (

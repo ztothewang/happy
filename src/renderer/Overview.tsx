@@ -1,4 +1,3 @@
-import { FileText, FolderOpen, MessageSquare, Wrench } from "lucide-react";
 import { runInTerminal, useDeployJobs } from "./TerminalView";
 import { Fragment, useEffect, useState } from "react";
 import { isDeployed } from "../shared/types";
@@ -43,7 +42,7 @@ function SessionBullet({ r, onOpen }: { r: OverviewSessionRef; onOpen(id: string
           <span className="ov-li-text">{r.summary ?? r.title}</span>
           <Chips g={r.git} />
           <button className="ov-act" onClick={() => onOpen(r.id)}>
-            <MessageSquare size={11} /> open
+            open
           </button>
         </div>
         <div className="ov-li-meta">
@@ -105,11 +104,9 @@ function ErrorBullet({ g, projects, onOpen }: { g: ErrorGroup; projects: Record<
             {open ? "hide log" : "log sample"}
           </button>
           <button className="ov-act" onClick={() => errorAction("ask", g, projects, onOpen)} title="Investigate in its own chat">
-            <MessageSquare size={11} />
             ask
           </button>
           <button className="ov-act" onClick={() => errorAction("fix", g, projects, onOpen)} title="Fix in a new chat on its own branch">
-            <Wrench size={11} />
             fix
           </button>
         </div>
@@ -278,7 +275,6 @@ function Routines() {
                 {r.enabled ? r.nextRun && <span>next {until(r.nextRun)}</span> : <span className="rt-paused">paused</span>}
                 {r.lastRun && <span>last ran {ago(r.lastRun)}</span>}
                 <button className="ov-act" onClick={() => hub().openFile(r.file)}>
-                  <FileText size={11} />
                   prompt
                 </button>
               </div>
@@ -365,14 +361,12 @@ export function OverviewView({ onOpen }: { onOpen(id: string): void }) {
                     {u.branch && <span className="wt">⎇ {u.branch}</span>}
                     {u.sessionId ? (
                       <button className="ov-act" onClick={() => onOpen(u.sessionId!)}>
-                        <MessageSquare size={11} />
                         open session
                       </button>
                     ) : (
                       <span>no session</span>
                     )}
                     <button className="ov-act" onClick={() => hub().revealFile(u.path)}>
-                      <FolderOpen size={11} />
                       folder
                     </button>
                     {u.headTime && <span>last commit {ago(u.headTime)}</span>}

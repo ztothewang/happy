@@ -1865,3 +1865,35 @@ pre.code { position: relative; }
 .em-draft-html .em-html { margin: 0; }
 .em-draft-html-acts { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 6px 10px; border-top: 1px solid var(--div); background: var(--side); }
 .ask-why { margin-top: 4px; white-space: normal; }
+
+/* ── Actions: one small button everywhere (desktop) ─────────────────────────────
+   .kb is the button. .kb.pri / .tk-go is the one primary action in an area. Text buttons carry no icons;
+   icon-only buttons are .icon-btn with a title. .link-btn, .ov-act, .simplify and .pin-btn are the same button
+   (kept as names for their placement rules). */
+.kb, .link-btn, .tk-go, .ov-act, .simplify, .pin-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  height: 22px; padding: 0 8px; border-radius: 5px; border: 1px solid var(--div);
+  background: none; color: var(--fg); font: 11px/1 var(--fm); white-space: nowrap; text-decoration: none; flex-shrink: 0; margin-top: 0;
+}
+.kb:hover:not(:disabled), .link-btn:hover:not(:disabled), .ov-act:hover:not(:disabled), .simplify:hover:not(:disabled), .pin-btn:hover:not(:disabled) {
+  background: var(--hover); color: var(--fg); border-color: color-mix(in srgb, var(--fg) 22%, var(--div)); text-decoration: none;
+}
+.kb:disabled, .link-btn:disabled, .tk-go:disabled, .ov-act:disabled, .simplify:disabled, .pin-btn:disabled { opacity: 0.4; cursor: default; }
+.kb.pri, .tk-go { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 500; }
+.kb.pri:hover:not(:disabled), .tk-go:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); color: var(--on-accent); }
+.kb.on { background: var(--sel); color: var(--fg); }
+/* Reply macros (simplify, wtf?, status, pin, copy): the same button, quieter. */
+.simplify, .pin-btn { color: var(--dim); margin-left: 0; }
+.simplify.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--div)); }
+.pin-btn.on { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--div)); }
+.ov-act svg { display: none; }
+/* External links that act as actions ("console ↗", "open in Linear ↗") are the same small button. */
+.cl-ext { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border: 1px solid var(--div); border-radius: 5px; color: var(--fg); font: 11px/1 var(--fm); flex-shrink: 0; }
+.cl-ext:hover { background: var(--hover); color: var(--fg); border-color: color-mix(in srgb, var(--fg) 22%, var(--div)); }
+/* Tasks: one "hand to" per row would be a column of buttons; it shows on the row you point at or have open. */
+.tk-hand { height: 22px; padding: 0 8px; color: var(--fg); background: none; opacity: 0; }
+.tk-row:hover .tk-hand, .tk-row.open .tk-hand, .tk-hand:focus-visible { opacity: 1; }
+.tk-bar .cal-ask { align-items: center; }
+/* Cloud: severity is a dot, not a bar down the row's edge. */
+.cl-issue { grid-template-columns: 8px 28px 38px minmax(0, 1fr) auto; }
+.cl-sev { align-self: start; width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--dim2); }

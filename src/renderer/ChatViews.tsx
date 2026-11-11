@@ -54,7 +54,7 @@ export function ChatWallView({ sessions, groups, onOpen, onGrid }: { sessions: S
             </>
           )}
           <button className="tk-go" disabled={!picked.length} onClick={onGrid}>
-            <Grid2x2 size={13} /> open chat grid
+            open chat grid
           </button>
         </span>
       </div>
@@ -295,7 +295,7 @@ export function ChatGridView({ sessions, onOpen, onBack, onWall }: { sessions: R
         <span className="muted mono small">{ids.length} chats</span>
         <span className="ac-bar-right">
           <button className="link-btn" onClick={(e) => addMenu(e.currentTarget)}>
-            + add
+            add
           </button>
           <button className="link-btn" onClick={onWall}>
             pick on the chat wall

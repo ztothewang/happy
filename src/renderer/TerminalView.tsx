@@ -2,7 +2,7 @@ import "@xterm/xterm/css/xterm.css";
 import { num } from "./models";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { Columns2, Rows2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { hub } from "./App";
 import type { DeployJob } from "../shared/types";
@@ -189,7 +189,7 @@ export function TerminalView() {
           {num(ids.length)} of {MAX}
         </span>
         <button className="kb" disabled={ids.length >= MAX} onClick={split} title={ids.length < 2 ? "Split side by side" : "Split top/bottom"}>
-          {ids.length < 2 ? <Columns2 size={12} /> : <Rows2 size={12} />} split
+          split
         </button>
       </div>
       <div className="term-grid">

@@ -626,7 +626,7 @@ export function TasksView({ sessions, onOpen }: { sessions: Record<string, Sessi
           </button>
         </form>
         <button className="tk-go" onClick={() => (setOpen(null), setCreating({}))}>
-          + new
+          new
         </button>
         <span className="muted mono small bar-meta">
           {list ? `${num(rows.length)} open · ${urgent} urgent/high` : ""}
