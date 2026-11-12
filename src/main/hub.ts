@@ -14,6 +14,7 @@ import { GitWatch } from "./gitWatch.js";
 import { claudeWindow, readCodexLimits, readCodexModels, readCursorTier } from "./limits.js";
 import { annotate } from "./briefing.js";
 import { Linear, taskPrompt } from "./linear.js";
+import { PostHog } from "./analytics.js";
 import { Gmail } from "./gmail.js";
 import { settings } from "./settings.js";
 import { Calendar } from "./calendar.js";
@@ -211,6 +212,7 @@ export class Hub implements SessionHost {
   private cloudBusy?: Promise<CloudSnapshot>;
   private cloudTimer?: NodeJS.Timeout;
   readonly linear: Linear;
+  readonly posthog: PostHog;
   readonly gmail: Gmail;
   readonly calendar: Calendar;
   readonly contacts: ContactBook;
@@ -258,6 +260,7 @@ export class Hub implements SessionHost {
     mkdirSync(dataDir, { recursive: true });
     this.media = new MediaStore(dataDir);
     this.linear = new Linear(dataDir);
+    this.posthog = new PostHog(dataDir);
     this.gmail = new Gmail(dataDir, openAuthWindow);
     this.calendar = new Calendar(this.gmail);
     this.contacts = new ContactBook(dataDir, this.gmail);

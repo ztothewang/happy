@@ -1909,6 +1909,7 @@ pre.code { position: relative; }
 
 /* analytics (PostHog) */
 .an-seg { display: inline-flex; gap: 2px; }
+.an-proj { font: 12px var(--fm); background: var(--raise); color: var(--fg); border: 1px solid var(--div); border-radius: 6px; padding: 2px 6px; height: 22px; }
 .an-fold { cursor: pointer; user-select: none; }
 .an-fold:hover { color: var(--fg); }
 .an-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); column-gap: 16px; max-height: 260px; overflow-y: auto; }

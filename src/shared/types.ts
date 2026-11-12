@@ -140,18 +140,6 @@ export interface ProjectConfig {
   glossary?: Record<string, string>;
   /** Cloud page provider. Only "gcp" for now (Cloud Run, Cloud SQL, Scheduler, Logging via gcloud). */
   cloud?: { provider: "gcp" };
-  /** Analytics page: product events from PostHog, read with a personal API key (HogQL, read-only). */
-  analytics?: {
-    provider: "posthog";
-    /** Default https://us.posthog.com. */
-    host?: string;
-    projectId: string;
-    /** Where the personal API key is: a local file (~ allowed), else a Secret Manager secret read with gcloud. */
-    keyFile?: string;
-    keySecret?: { project: string; name: string };
-    /** Site host ($host) → environment id. Events from other hosts are left out. */
-    hosts?: Record<string, string>;
-  };
 }
 
 export interface AnalyticsQuery {
@@ -183,8 +171,18 @@ export interface AnalyticsEventDetail {
   link: string;
 }
 
+export interface AnalyticsStatus {
+  connected: boolean;
+  error?: string;
+  host?: string;
+  projects?: Array<{ id: number; name: string }>;
+  projectId?: number;
+  /** The key comes from POSTHOG_PERSONAL_API_KEY (Settings can't change it). */
+  fromEnv?: boolean;
+}
+
 export interface AnalyticsSnapshot {
-  configured: boolean;
+  connected: boolean;
   error?: string;
   fetchedAt: number;
   /** The PostHog project, for "open in PostHog". */
@@ -1224,6 +1222,10 @@ export interface HubApi {
   projectConfig(): Promise<ProjectConfig>;
   analytics(q: AnalyticsQuery): Promise<AnalyticsSnapshot>;
   analyticsEvent(id: string, ts: number): Promise<AnalyticsEventDetail>;
+  analyticsStatus(): Promise<AnalyticsStatus>;
+  analyticsConnect(key: string, host: string): Promise<AnalyticsStatus>;
+  analyticsDisconnect(): Promise<void>;
+  analyticsSetProject(id: number): Promise<void>;
   stats(refresh?: boolean, range?: HappyStats["range"]): Promise<HappyStats>;
   termCreate(id: string, cwd: string, cols: number, rows: number, command?: string): Promise<{ id: string; cwd: string; buffer: string }>;
   termList(): Promise<Array<{ id: string; cwd: string; buffer: string }>>;

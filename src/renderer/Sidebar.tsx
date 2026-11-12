@@ -209,16 +209,16 @@ function CloudRow({ active, onClick }: { active: boolean; onClick(): void }) {
 export const TASKS = "tasks";
 export const ANALYTICS = "analytics";
 
-/** The Analytics entry: shown when the project config sets up PostHog. */
+/** The Analytics entry: product events from PostHog ("connect" until a key is added). */
 function AnalyticsRow({ active, onClick }: { active: boolean; onClick(): void }) {
-  const [on, setOn] = useState(false);
+  const [connected, setConnected] = useState<boolean | null>(null);
   useEffect(() => {
-    void hub()
-      .projectConfig()
-      .then((c) => setOn(!!c.analytics));
+    const load = () => void hub().analyticsStatus().then((s) => setConnected(s.connected));
+    load();
+    window.addEventListener("happy:posthog", load);
+    return () => window.removeEventListener("happy:posthog", load);
   }, []);
-  if (!on) return null;
-  return <NavItem icon={<Activity size={14} />} label="Analytics" right="" tone="dim" title="Product events from PostHog" active={active} onClick={onClick} />;
+  return <NavItem icon={<Activity size={14} />} label="Analytics" right={connected === false ? "connect" : ""} tone="dim" title={connected === false ? "connect PostHog" : "Product events from PostHog"} active={active} onClick={onClick} />;
 }
 export const EMAIL = "email";
 export const CALENDAR = "calendar";

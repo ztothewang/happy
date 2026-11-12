@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AnalyticsEvent, AnalyticsEventDetail, AnalyticsQuery, AnalyticsSnapshot } from "../shared/types";
+import type { AnalyticsEvent, AnalyticsEventDetail, AnalyticsQuery, AnalyticsSnapshot, AnalyticsStatus } from "../shared/types";
 import { hub } from "./App";
 import { tenantColor } from "./charts";
 import { num } from "./models";
@@ -50,6 +50,10 @@ export function AnalyticsView() {
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
   const [open, setOpen] = useState<AnalyticsEvent>();
+  const [status, setStatus] = useState<AnalyticsStatus>();
+  useEffect(() => {
+    if (snap?.connected && !status) void hub().analyticsStatus().then(setStatus);
+  }, [snap?.connected]);
 
   useEffect(() => {
     try {
@@ -88,11 +92,14 @@ export function AnalyticsView() {
   );
   const totalUsers = snap?.envs.reduce((a, e) => a + e.users, 0) ?? 0;
 
-  if (snap && !snap.configured)
+  if (snap && !snap.connected)
     return (
-      <div className="muted pad center small">
-        Analytics isn't set up for this project. Add an <code>analytics</code> block (PostHog project id, key file or secret, and site hosts per environment) to the project config.
-      </div>
+      <PostHogConnect
+        onConnected={() => {
+          window.dispatchEvent(new Event("happy:posthog"));
+          setTick((n) => n + 1);
+        }}
+      />
     );
 
   return (
@@ -124,6 +131,19 @@ export function AnalyticsView() {
                 </button>
               ))}
             </span>
+            {status && (status.projects?.length ?? 0) > 1 && (
+              <select
+                className="an-proj"
+                value={status.projectId}
+                onChange={(e) => void hub().analyticsSetProject(Number(e.target.value)).then(() => (setStatus({ ...status, projectId: Number(e.target.value) }), setTick((n) => n + 1)))}
+              >
+                {status.projects!.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
             {snap?.link && (
               <button className="kb" onClick={() => void hub().openInChrome(snap.link!)}>
                 PostHog
@@ -300,5 +320,59 @@ function EventDetail({ e, envName, onPerson, onClose }: { e: AnalyticsEvent; env
         )}
       </div>
     </aside>
+  );
+}
+
+/** Paste a PostHog personal API key: checked against PostHog, then stored encrypted with the OS keychain. */
+function PostHogConnect({ onConnected }: { onConnected(s: AnalyticsStatus): void }) {
+  const [key, setKey] = useState("");
+  const [host, setHost] = useState("https://us.posthog.com");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>();
+  useEffect(() => {
+    void hub()
+      .analyticsStatus()
+      .then((s) => setErr(s.error));
+  }, []);
+  const submit = async () => {
+    setBusy(true);
+    setErr(undefined);
+    try {
+      onConnected(await hub().analyticsConnect(key, host));
+    } catch (e) {
+      setErr((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ""));
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="tk-connect">
+      <h2>Connect PostHog</h2>
+      <p className="muted">
+        Happy reads your product events with a PostHog personal API key. Create one in PostHog under Settings → Personal API keys with read access to your project (query read), then
+        paste it here. It's encrypted with your macOS keychain and only sent to PostHog. Happy only runs read queries. Or set <code>POSTHOG_PERSONAL_API_KEY</code> in Happy's
+        environment instead.
+      </p>
+      <a className="cl-ext" href={`${host}/settings/user-api-keys`} target="_blank" rel="noreferrer">
+        open PostHog API key settings ↗
+      </a>
+      <form
+        className="tk-connect-row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (key.trim()) void submit();
+        }}
+      >
+        <select className="an-proj" value={host} onChange={(e) => setHost(e.target.value)}>
+          <option value="https://us.posthog.com">US cloud</option>
+          <option value="https://eu.posthog.com">EU cloud</option>
+        </select>
+        <input type="password" autoComplete="off" spellCheck={false} placeholder="phx_…" value={key} onChange={(e) => setKey(e.target.value)} />
+        <button className="kb" type="submit" disabled={busy || !key.trim()}>
+          {busy ? "checking…" : "connect"}
+        </button>
+      </form>
+      <p className="muted small">Tabs follow your environments: each site's first subdomain is matched to an environment's deploy tag, and the bare domain to the one without a tag.</p>
+      {err && <div className="tk-err">{err}</div>}
+    </div>
   );
 }
