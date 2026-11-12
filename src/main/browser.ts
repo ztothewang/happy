@@ -1,5 +1,5 @@
 import { BrowserWindow, WebContentsView, type Rectangle } from "electron";
-import type { BrowserState } from "../shared/types.js";
+import type { BrowserEdit, BrowserMenu, BrowserState } from "../shared/types.js";
 
 const HIDDEN_BOUNDS: Rectangle = { x: 0, y: 0, width: 1280, height: 800 };
 const MAX_CONSOLE = 200;
@@ -18,6 +18,7 @@ class SessionBrowser {
   constructor(
     readonly sessionId: string,
     private onState: (s: BrowserState) => void,
+    private onMenu: (p: Electron.ContextMenuParams) => void,
   ) {
     this.view = new WebContentsView({
       webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false, partition: "persist:session-hub-browser" },
@@ -31,6 +32,7 @@ class SessionBrowser {
     wc.on("page-title-updated", emit);
     wc.on("did-start-loading", emit);
     wc.on("did-stop-loading", emit);
+    wc.on("context-menu", (_e, p) => this.onMenu(p));
     wc.on("console-message", (e) => {
       this.console.push({ level: e.level, text: `${e.message}  (${e.sourceId}:${e.lineNumber})` });
       if (this.console.length > MAX_CONSOLE) this.console.shift();
@@ -167,13 +169,36 @@ export class BrowserManager {
 
   constructor(
     private getWindow: () => BrowserWindow | null,
-    private emit: { state(s: BrowserState): void; activity(sessionId: string): void },
+    private emit: { state(s: BrowserState): void; activity(sessionId: string): void; menu(m: BrowserMenu): void },
   ) {}
 
   private get(sessionId: string): SessionBrowser {
     let b = this.browsers.get(sessionId);
     if (!b) {
-      b = new SessionBrowser(sessionId, (s) => this.emit.state(s));
+      b = new SessionBrowser(
+        sessionId,
+        (s) => this.emit.state(s),
+        (p) => {
+          // Page coords → the app page's CSS pixels (the view sits at its bounds, scaled by the app's zoom).
+          const z = this.getWindow()?.webContents.getZoomFactor() ?? 1;
+          const at = b!.view.getBounds();
+          const st = b!.state();
+          this.emit.menu({
+            sessionId,
+            x: (at.x + p.x) / z,
+            y: (at.y + p.y) / z,
+            pageX: p.x,
+            pageY: p.y,
+            linkURL: p.linkURL,
+            srcURL: p.srcURL,
+            mediaType: p.mediaType,
+            selectionText: p.selectionText,
+            isEditable: p.isEditable,
+            canGoBack: st.canGoBack,
+            canGoForward: st.canGoForward,
+          });
+        },
+      );
       this.browsers.set(sessionId, b);
       this.getWindow()?.contentView.addChildView(b.view);
     }
@@ -221,6 +246,24 @@ export class BrowserManager {
       if (width < 400 || height < 300) b.view.setBounds(HIDDEN_BOUNDS);
     }
     if (this.shown === sessionId) this.shown = undefined;
+  }
+
+  /** What the pane shows right now, as a data URL. */
+  async snapshot(sessionId: string): Promise<string | null> {
+    const b = this.browsers.get(sessionId);
+    if (!b || this.shown !== sessionId) return null;
+    try {
+      return (await b.view.webContents.capturePage()).toDataURL();
+    } catch {
+      return null;
+    }
+  }
+
+  edit(sessionId: string, action: BrowserEdit, x?: number, y?: number) {
+    const wc = this.browsers.get(sessionId)?.view.webContents;
+    if (!wc) return;
+    if (action === "inspect") wc.inspectElement(Math.round(x ?? 0), Math.round(y ?? 0));
+    else wc[action]();
   }
 
   // ── user controls (toolbar) ──

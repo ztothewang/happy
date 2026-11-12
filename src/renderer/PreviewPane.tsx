@@ -1,9 +1,9 @@
 import { SheetView, isSheetPath } from "./SheetView";
 import { num } from "./models";
 import { TerminalPane } from "./TerminalView";
-import { useMenu } from "./Menu";
+import { useMenu, type MenuItem } from "./Menu";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, Fragment } from "react";
-import type { BrowserState, DirEntry, FileContent, GitChange, TranscriptItem } from "../shared/types";
+import type { BrowserMenu, BrowserState, DirEntry, FileContent, GitChange, TranscriptItem } from "../shared/types";
 import { hub } from "./App";
 import { diffLines, parseUnified, withContext, type DiffOp } from "./diff";
 import { Markdown, highlight } from "./Markdown";
@@ -151,16 +151,66 @@ function BrowserView({ sessionId, state, hidden }: { sessionId: string; state?: 
   const slot = useRef<HTMLDivElement>(null);
   const [url, setUrl] = useState(state?.url ?? "");
   const [editing, setEditing] = useState(false);
+  const menu = useMenu();
+  /** While a menu is open over the pane: a picture of the page, standing in for the native view (which would cover the menu). */
+  const [shot, setShot] = useState<string | null>(null);
 
   useEffect(() => {
     if (!editing) setUrl(state?.url ?? "");
   }, [state?.url, editing]);
 
+  useEffect(() => {
+    let gen = 0;
+    const on = (e: Event) => {
+      const open = (e as CustomEvent<boolean>).detail;
+      const my = ++gen;
+      if (!open) return setShot(null);
+      void hub()
+        .browserSnapshot(sessionId)
+        .then((url) => my === gen && setShot(url ?? "blank"));
+    };
+    window.addEventListener("happy:overlay", on);
+    return () => window.removeEventListener("happy:overlay", on);
+  }, [sessionId]);
+
+  // Right-click in the page: Happy's own menu.
+  useEffect(
+    () =>
+      hub().onBrowserMenu((m: BrowserMenu) => {
+        if (m.sessionId !== sessionId) return;
+        const edit = (a: Parameters<ReturnType<typeof hub>["browserEdit"]>[1]) => () => void hub().browserEdit(sessionId, a, m.pageX, m.pageY);
+        const copy = (t: string) => () => void navigator.clipboard.writeText(t);
+        const items: MenuItem[] = [];
+        if (m.linkURL)
+          items.push(
+            { label: "Open link here", onSelect: () => void hub().browserNavigate(sessionId, m.linkURL) },
+            { label: "Open link in Chrome", onSelect: () => void hub().openInChrome(m.linkURL) },
+            { label: "Copy link", onSelect: copy(m.linkURL) },
+            { type: "separator" },
+          );
+        if (m.mediaType === "image" && m.srcURL) items.push({ label: "Copy image address", onSelect: copy(m.srcURL) }, { type: "separator" });
+        if (m.isEditable)
+          items.push({ label: "Cut", onSelect: edit("cut") }, { label: "Copy", onSelect: edit("copy") }, { label: "Paste", onSelect: edit("paste") }, { label: "Select all", onSelect: edit("selectAll") }, { type: "separator" });
+        else if (m.selectionText.trim()) items.push({ label: "Copy", onSelect: edit("copy") }, { type: "separator" });
+        if (m.canGoBack) items.push({ label: "Back", onSelect: () => void hub().browserNav(sessionId, "back") });
+        if (m.canGoForward) items.push({ label: "Forward", onSelect: () => void hub().browserNav(sessionId, "forward") });
+        items.push(
+          { label: "Reload", onSelect: () => void hub().browserNav(sessionId, "reload") },
+          { type: "separator" },
+          { label: "Copy page address", onSelect: copy(state?.url ?? "") },
+          { label: "Open page in Chrome", onSelect: () => state?.url && void hub().openInChrome(state.url) },
+          { label: "Inspect element", onSelect: edit("inspect") },
+        );
+        menu.at(m.x, m.y, items);
+      }),
+    [sessionId, state?.url],
+  );
+
   useLayoutEffect(() => {
     const el = slot.current!;
     let last = "";
     const push = (force = true) => {
-      if (hidden) return void hub().browserSetBounds(sessionId, null);
+      if (hidden || shot) return void hub().browserSetBounds(sessionId, null);
       const r = el.getBoundingClientRect();
       const key = `${r.left},${r.top},${r.width},${r.height},${window.devicePixelRatio}`;
       if (!force && key === last) return;
@@ -180,7 +230,7 @@ function BrowserView({ sessionId, state, hidden }: { sessionId: string; state?: 
       window.removeEventListener("resize", onResize);
       void hub().browserSetBounds(sessionId, null);
     };
-  }, [sessionId, hidden]);
+  }, [sessionId, hidden, shot]);
 
   const go = () => {
     setEditing(false);
@@ -213,6 +263,7 @@ function BrowserView({ sessionId, state, hidden }: { sessionId: string; state?: 
         />
       </div>
       <div className="browser-slot" ref={slot}>
+        {shot && shot !== "blank" && <img className="browser-shot" src={shot} alt="" />}
         {!state?.url && <div className="muted pad center">Blank tab. Type a URL, or ask the agent to open one.</div>}
       </div>
     </div>

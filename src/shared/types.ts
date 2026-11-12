@@ -1015,6 +1015,25 @@ export interface BrowserState {
   canGoForward: boolean;
 }
 
+/** A right-click inside the browser pane: where (app page coords) and what was under the mouse. */
+export interface BrowserMenu {
+  sessionId: string;
+  x: number;
+  y: number;
+  /** The click in the page's own coords (for Inspect). */
+  pageX: number;
+  pageY: number;
+  linkURL: string;
+  srcURL: string;
+  mediaType: string;
+  selectionText: string;
+  isEditable: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+export type BrowserEdit = "copy" | "cut" | "paste" | "selectAll" | "inspect";
+
 export type FileContent =
   | { kind: "text"; text: string; size: number }
   | { kind: "image" | "pdf" | "binary"; size: number }
@@ -1111,6 +1130,10 @@ export interface HubApi {
   browserNav(sessionId: string, action: "back" | "forward" | "reload" | "stop"): Promise<void>;
   browserState(sessionId: string): Promise<BrowserState | null>;
   onBrowserState(cb: (s: BrowserState) => void): () => void;
+  onBrowserMenu(cb: (m: BrowserMenu) => void): () => void;
+  /** The browser pane as an image (shown in its place while a menu is open over it). */
+  browserSnapshot(sessionId: string): Promise<string | null>;
+  browserEdit(sessionId: string, action: BrowserEdit, x?: number, y?: number): Promise<void>;
   onBrowserActivity(cb: (sessionId: string) => void): () => void;
   simplify(sessionId: string, itemId: string): Promise<void>;
   gcloudStatus(): Promise<GcloudStatus>;

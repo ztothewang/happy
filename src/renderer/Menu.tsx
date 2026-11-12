@@ -43,6 +43,11 @@ export function useMenu() {
 export function MenuProvider({ children }: { children: React.ReactNode }) {
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const close = useCallback(() => setMenu(null), []);
+  // The browser pane is a native view drawn over the page: it swaps itself for a snapshot while a menu is open.
+  const open = !!menu;
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("happy:overlay", { detail: open }));
+  }, [open]);
   return (
     <MenuContext.Provider value={setMenu}>
       {children}

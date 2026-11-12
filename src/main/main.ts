@@ -21,7 +21,7 @@ import { listRoutines } from "./routines.js";
 import { projectConfig, setUserConfigDir } from "./projectConfig.js";
 import { codexPrices, refreshCodexPrices } from "./codexPrices.js";
 import { Terminals, plainText } from "./terminals.js";
-import type { BrowserState, DeployJob, SessionState } from "../shared/types.js";
+import type { BrowserEdit, BrowserMenu, BrowserState, DeployJob, SessionState } from "../shared/types.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -177,6 +177,7 @@ app.whenReady().then(async () => {
   browsers = new BrowserManager(() => win, {
     state: (s: BrowserState) => send("browser:state", s),
     activity: (id: string) => send("browser:activity", id),
+    menu: (m: BrowserMenu) => send("browser:menu", m),
   });
   browserHttp = new BrowserMcpHttp(browsers);
   await browserHttp.start();
@@ -579,6 +580,8 @@ app.whenReady().then(async () => {
   handle("browser:navigate", (id: string, url: string) => browsers.userNavigate(id, url));
   handle("browser:nav", (id: string, action) => browsers.nav(id, action));
   handle("browser:state", (id: string) => browsers.state(id));
+  handle("browser:snapshot", (id: string) => browsers.snapshot(id));
+  handle("browser:edit", (id: string, action: BrowserEdit, x?: number, y?: number) => browsers.edit(id, action, x, y));
 
   createWindow();
   app.on("activate", () => {
