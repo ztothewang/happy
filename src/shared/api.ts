@@ -73,6 +73,7 @@ export function makeApi(invoke: Invoke, listen: Listen, extras: { pathForFile(fi
   gcloudStatus: () => invoke("gcloud:status"),
   cloud: (refresh) => invoke("hub:cloud", refresh),
   analytics: (q) => invoke("hub:analytics", q),
+  analyticsEvent: (id, ts) => invoke("hub:analyticsEvent", id, ts),
   onCloud: (cb) => listen("hub:cloud", cb),
   cloudChat: () => invoke("hub:cloudChat"),
   emailChat: () => invoke("hub:emailChat"),

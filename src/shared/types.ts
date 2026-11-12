@@ -161,11 +161,11 @@ export interface AnalyticsQuery {
   /** Environment id, or all. */
   env?: string;
   person?: string;
-  signedIn?: boolean;
   hideInternal?: boolean;
 }
 
 export interface AnalyticsEvent {
+  id: string;
   ts: number;
   event: string;
   email?: string;
@@ -173,6 +173,16 @@ export interface AnalyticsEvent {
   path?: string;
   /** Autocapture: "click Save". */
   action?: string;
+}
+
+export interface AnalyticsEventDetail {
+  properties: Record<string, unknown>;
+  person: Record<string, unknown>;
+  /** Autocapture: the clicked element and its parents. */
+  elements?: string;
+  distinctId: string;
+  /** This event in PostHog. */
+  link: string;
 }
 
 export interface AnalyticsSnapshot {
@@ -1215,6 +1225,7 @@ export interface HubApi {
   /** The main repo's .happy/config.json (environments, deploys…); {} when there is none. */
   projectConfig(): Promise<ProjectConfig>;
   analytics(q: AnalyticsQuery): Promise<AnalyticsSnapshot>;
+  analyticsEvent(id: string, ts: number): Promise<AnalyticsEventDetail>;
   stats(refresh?: boolean, range?: HappyStats["range"]): Promise<HappyStats>;
   termCreate(id: string, cwd: string, cols: number, rows: number, command?: string): Promise<{ id: string; cwd: string; buffer: string }>;
   termList(): Promise<Array<{ id: string; cwd: string; buffer: string }>>;

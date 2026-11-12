@@ -19,7 +19,7 @@ import { runSmoke } from "./smoke.js";
 import { linkPreview } from "./linkPreview.js";
 import { listRoutines } from "./routines.js";
 import { projectConfig, setUserConfigDir } from "./projectConfig.js";
-import { analytics } from "./analytics.js";
+import { analytics, analyticsEvent } from "./analytics.js";
 import { codexPrices, refreshCodexPrices } from "./codexPrices.js";
 import { Terminals, plainText } from "./terminals.js";
 import type { AnalyticsQuery, BrowserEdit, BrowserMenu, BrowserState, DeployJob, SessionState } from "../shared/types.js";
@@ -540,6 +540,7 @@ app.whenReady().then(async () => {
   handle("routines:runs", (id: string) => hub.routineRuns(id));
   handle("routines:show", (id: string, runId: string | null) => hub.showRoutineRun(id, runId));
   handle("hub:projectConfig", () => projectConfig(settings().repo));
+  handle("hub:analyticsEvent", (id: string, ts: number) => analyticsEvent(projectConfig(settings().repo), id, ts));
   handle("hub:analytics", (q: AnalyticsQuery) => (demo ? { configured: false, fetchedAt: Date.now(), envs: [], people: [], top: [], feed: [] } : analytics(projectConfig(settings().repo), q)));
   handle("link:chrome", (url: string) => {
     if (!/^https?:\/\//i.test(url)) throw new Error("Only web links");

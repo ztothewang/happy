@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { promisify } from "node:util";
-import type { AnalyticsQuery, AnalyticsSnapshot, ProjectConfig } from "../shared/types.js";
+import type { AnalyticsEventDetail, AnalyticsQuery, AnalyticsSnapshot, ProjectConfig } from "../shared/types.js";
 
 const run = promisify(execFile);
 
@@ -53,7 +53,7 @@ export async function analytics(cfg: ProjectConfig, opts: AnalyticsQuery): Promi
   const where = [`timestamp > now() - INTERVAL ${RANGE_SQL[opts.range]}`];
   const envHosts = opts.env ? allHosts.filter((h) => hosts[h] === opts.env) : allHosts;
   if (envHosts.length) where.push(`properties.$host IN (${envHosts.map(q).join(",")})`);
-  if (opts.signedIn) where.push("person.properties.email IS NOT NULL AND person.properties.email != ''");
+  where.push("person.properties.email IS NOT NULL AND person.properties.email != ''");
   if (opts.hideInternal) for (const s of a.internal ?? []) where.push(`NOT (coalesce(person.properties.email, '') ILIKE ${q(`%${s}`)})`);
   if (opts.person) where.push(`person.properties.email = ${q(opts.person)}`);
   const base = where.join(" AND ");
@@ -64,7 +64,7 @@ export async function analytics(cfg: ProjectConfig, opts: AnalyticsQuery): Promi
       hogql(a, `SELECT properties.$host h, uniq(person_id), count() FROM events WHERE ${base} GROUP BY h`),
       hogql(a, `SELECT person.properties.email e, any(properties.$host), count(), max(timestamp) m FROM events WHERE ${base} AND e IS NOT NULL AND e != '' GROUP BY e ORDER BY m DESC LIMIT 300`),
       hogql(a, `SELECT event, count() c, uniq(person_id) FROM events WHERE ${base} AND ${quiet} GROUP BY event ORDER BY c DESC LIMIT 40`),
-      hogql(a, `SELECT timestamp, event, person.properties.email, properties.$host, properties.$pathname, properties.$event_type, elements_chain_texts FROM events WHERE ${base} AND ${quiet} ORDER BY timestamp DESC LIMIT 300`),
+      hogql(a, `SELECT timestamp, event, person.properties.email, properties.$host, properties.$pathname, properties.$event_type, elements_chain_texts, uuid FROM events WHERE ${base} AND ${quiet} ORDER BY timestamp DESC LIMIT 300`),
     ]);
     const perEnv = new Map<string, { users: number; events: number }>();
     for (const [h, u, c] of byHost as [string, number, number][]) {
@@ -82,7 +82,8 @@ export async function analytics(cfg: ProjectConfig, opts: AnalyticsQuery): Promi
       envs: envs.filter((e) => allHosts.some((h) => hosts[h] === e.id)).map((e) => ({ id: e.id, name: e.name ?? e.id, color: e.color, ...(perEnv.get(e.id) ?? { users: 0, events: 0 }) })),
       people: (people as [string, string, number, string][]).map(([email, host, events, last]) => ({ email, env: envOf(host), events, lastSeen: Date.parse(last) })),
       top: (top as [string, number, number][]).map(([event, count, users]) => ({ event, count, users })),
-      feed: (feed as [string, string, string | null, string, string | null, string | null, string[] | null][]).map(([ts, event, email, host, path, type, texts]) => ({
+      feed: (feed as [string, string, string | null, string, string | null, string | null, string[] | null, string][]).map(([ts, event, email, host, path, type, texts, id]) => ({
+        id,
         ts: Date.parse(ts),
         event,
         email: email || undefined,
@@ -94,4 +95,27 @@ export async function analytics(cfg: ProjectConfig, opts: AnalyticsQuery): Promi
   } catch (e) {
     return { configured: true, error: (e as Error).message, fetchedAt: Date.now(), link, envs: [], people: [], top: [], feed: [] };
   }
+}
+
+/** One event's full record, for the details panel. */
+export async function analyticsEvent(cfg: ProjectConfig, id: string, ts: number): Promise<AnalyticsEventDetail> {
+  const a = cfg.analytics;
+  if (!a) throw new Error("Analytics isn't set up for this project.");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("Bad event id.");
+  // The timestamp window lets ClickHouse skip straight to the right partition.
+  const at = (d: number) => q(new Date(d).toISOString().replace("T", " ").replace("Z", ""));
+  const [row] = await hogql(
+    a,
+    `SELECT properties, person.properties, elements_chain, distinct_id FROM events WHERE uuid = ${q(id)} AND timestamp >= toDateTime64(${at(ts - 60_000)}, 6, 'UTC') AND timestamp <= toDateTime64(${at(ts + 60_000)}, 6, 'UTC') LIMIT 1`,
+  );
+  if (!row) throw new Error("Event not found.");
+  const parse = (x: unknown) => (typeof x === "string" ? (JSON.parse(x) as Record<string, unknown>) : ((x as Record<string, unknown>) ?? {}));
+  const host = (a.host ?? "https://us.posthog.com").replace(/\/$/, "");
+  return {
+    properties: parse(row[0]),
+    person: parse(row[1]),
+    elements: (row[2] as string) || undefined,
+    distinctId: row[3] as string,
+    link: `${host}/project/${a.projectId}/events/${id}/${encodeURIComponent(new Date(ts).toISOString())}`,
+  };
 }
