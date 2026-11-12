@@ -1,7 +1,7 @@
 import { dueLabel, isOverdue, openTodos } from "./Todos";
 import { Grid2x2, LayoutList } from "lucide-react";
 import { grid, useGrid } from "./grid";
-import { CalendarDays, Cloud, LayoutDashboard, ListChecks, Mail, Plus, Settings, SquareTerminal } from "lucide-react";
+import { Activity, CalendarDays, Cloud, LayoutDashboard, ListChecks, Mail, Plus, Settings, SquareTerminal } from "lucide-react";
 import { useTerminalCount } from "./TerminalView";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { inBackground, isClosedIssue, isSystemSession } from "../shared/types";
@@ -207,6 +207,19 @@ function CloudRow({ active, onClick }: { active: boolean; onClick(): void }) {
 }
 
 export const TASKS = "tasks";
+export const ANALYTICS = "analytics";
+
+/** The Analytics entry: shown when the project config sets up PostHog. */
+function AnalyticsRow({ active, onClick }: { active: boolean; onClick(): void }) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    void hub()
+      .projectConfig()
+      .then((c) => setOn(!!c.analytics));
+  }, []);
+  if (!on) return null;
+  return <NavItem icon={<Activity size={14} />} label="Analytics" right="" tone="dim" title="Product events from PostHog" active={active} onClick={onClick} />;
+}
 export const EMAIL = "email";
 export const CALENDAR = "calendar";
 export const SETTINGS = "settings";
@@ -714,7 +727,7 @@ export function Sidebar(props: {
   const filtering = !!props.filter.trim();
   const ok = (s: SessionState) => matchesFilter(s, props.filter);
   const manager = props.sessions.find((s) => s.isManager);
-  const show = useSettings()?.show ?? { manager: true, cloud: true, tasks: true, email: true, calendar: true, terminal: true };
+  const show = useSettings()?.show ?? { manager: true, cloud: true, analytics: true, tasks: true, email: true, calendar: true, terminal: true };
   const live = props.sessions.filter((s) => !isSystemSession(s) && !s.archived && ok(s));
   const archived = props.sessions.filter((s) => !isSystemSession(s) && s.archived && ok(s));
   // Routine chats sit in their own section, not in General or a group.
@@ -796,6 +809,7 @@ export function Sidebar(props: {
           <ManagerNav s={manager} working={live.filter((x) => x.status === "running").length} active={props.selected === manager.id} onClick={() => props.onSelect(manager.id)} />
         )}
         {!filtering && show.cloud && <CloudRow active={props.selected === CLOUD} onClick={() => props.onSelect(CLOUD)} />}
+        {!filtering && show.analytics && <AnalyticsRow active={props.selected === ANALYTICS} onClick={() => props.onSelect(ANALYTICS)} />}
         {!filtering && show.tasks && <TasksRow active={props.selected === TASKS} onClick={() => props.onSelect(TASKS)} />}
         {!filtering && show.email && <EmailRow active={props.selected === EMAIL} onClick={() => props.onSelect(EMAIL)} />}
         {!filtering && show.calendar && <CalendarRow active={props.selected === CALENDAR} onClick={() => props.onSelect(CALENDAR)} />}

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { AppSettings, TagDef } from "../shared/types.js";
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  show: { manager: true, cloud: true, tasks: true, email: true, calendar: true, terminal: true },
+  show: { manager: true, cloud: true, analytics: true, tasks: true, email: true, calendar: true, terminal: true },
   bypass: { sessions: true, tasks: true, manager: false, cloud: false, email: true },
   defaultEngine: "claude",
   models: {},
@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tags: [
     { name: "backfill", description: "The changes include a backfill script that still has to be run.", auto: true },
     { name: "migration", description: "The changes include a database migration that hasn't been applied yet.", auto: true },
-    { name: "npm", description: "A package in this repo changed, and its new version still needs publishing to npm.", auto: true },
+    { name: "mcp", description: "The MCP server changed, and the new version still needs publishing to npm.", auto: true },
     { name: "qa", description: "A person needs to review or test this by hand.", auto: false },
   ],
   autoTags: true,

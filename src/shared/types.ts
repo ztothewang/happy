@@ -140,6 +140,51 @@ export interface ProjectConfig {
   glossary?: Record<string, string>;
   /** Cloud page provider. Only "gcp" for now (Cloud Run, Cloud SQL, Scheduler, Logging via gcloud). */
   cloud?: { provider: "gcp" };
+  /** Analytics page: product events from PostHog, read with a personal API key (HogQL, read-only). */
+  analytics?: {
+    provider: "posthog";
+    /** Default https://us.posthog.com. */
+    host?: string;
+    projectId: string;
+    /** Where the personal API key is: a local file (~ allowed), else a Secret Manager secret read with gcloud. */
+    keyFile?: string;
+    keySecret?: { project: string; name: string };
+    /** Site host ($host) → environment id. Events from other hosts are left out. */
+    hosts?: Record<string, string>;
+    /** Email suffixes of your own team, hidden with "hide team". */
+    internal?: string[];
+  };
+}
+
+export interface AnalyticsQuery {
+  range: "1h" | "24h" | "7d" | "30d";
+  /** Environment id, or all. */
+  env?: string;
+  person?: string;
+  signedIn?: boolean;
+  hideInternal?: boolean;
+}
+
+export interface AnalyticsEvent {
+  ts: number;
+  event: string;
+  email?: string;
+  env?: string;
+  path?: string;
+  /** Autocapture: "click Save". */
+  action?: string;
+}
+
+export interface AnalyticsSnapshot {
+  configured: boolean;
+  error?: string;
+  fetchedAt: number;
+  /** The PostHog project, for "open in PostHog". */
+  link?: string;
+  envs: Array<{ id: string; name: string; color?: string; users: number; events: number }>;
+  people: Array<{ email: string; env?: string; events: number; lastSeen: number }>;
+  top: Array<{ event: string; count: number; users: number }>;
+  feed: AnalyticsEvent[];
 }
 
 export interface DeployComponent {
@@ -744,7 +789,7 @@ export interface EventInput {
 // ── App settings ────────────────────────────────────────────
 export interface AppSettings {
   /** Which app sections appear in the sidebar. */
-  show: { manager: boolean; cloud: boolean; tasks: boolean; email: boolean; calendar: boolean; terminal: boolean };
+  show: { manager: boolean; cloud: boolean; analytics: boolean; tasks: boolean; email: boolean; calendar: boolean; terminal: boolean };
   /** Start agents with max permissions (Claude bypass / Codex full access / Cursor full) in each area. */
   bypass: { sessions: boolean; tasks: boolean; manager: boolean; cloud: boolean; email: boolean };
   /** Engine for new chats and task agents. */
@@ -1169,6 +1214,7 @@ export interface HubApi {
   openInChrome(url: string): Promise<void>;
   /** The main repo's .happy/config.json (environments, deploys…); {} when there is none. */
   projectConfig(): Promise<ProjectConfig>;
+  analytics(q: AnalyticsQuery): Promise<AnalyticsSnapshot>;
   stats(refresh?: boolean, range?: HappyStats["range"]): Promise<HappyStats>;
   termCreate(id: string, cwd: string, cols: number, rows: number, command?: string): Promise<{ id: string; cwd: string; buffer: string }>;
   termList(): Promise<Array<{ id: string; cwd: string; buffer: string }>>;

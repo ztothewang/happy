@@ -72,6 +72,7 @@ export function makeApi(invoke: Invoke, listen: Listen, extras: { pathForFile(fi
   simplify: (sessionId, itemId) => invoke("hub:simplify", sessionId, itemId),
   gcloudStatus: () => invoke("gcloud:status"),
   cloud: (refresh) => invoke("hub:cloud", refresh),
+  analytics: (q) => invoke("hub:analytics", q),
   onCloud: (cb) => listen("hub:cloud", cb),
   cloudChat: () => invoke("hub:cloudChat"),
   emailChat: () => invoke("hub:emailChat"),

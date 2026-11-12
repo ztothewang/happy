@@ -12,12 +12,13 @@ import { CloudView } from "./CloudView";
 import { MobileApp } from "./mobile/MobileApp";
 import { Lightbox, openLightbox } from "./Lightbox";
 import { ResizeHandle, usePanelWidth } from "./resize";
-import { CHAT_WALL, CALENDAR, CLOUD, EMAIL, GRID, SETTINGS, TASKS, TERMINAL, STATS } from "./Sidebar";
+import { ANALYTICS, CHAT_WALL, CALENDAR, CLOUD, EMAIL, GRID, SETTINGS, TASKS, TERMINAL, STATS } from "./Sidebar";
 import { viewing } from "./viewing";
 import { ChatWallView, ChatGridView } from "./ChatViews";
 import { useGrid } from "./grid";
 import { SettingsView } from "./SettingsView";
 import { CalendarView } from "./CalendarView";
+import { AnalyticsView } from "./AnalyticsView";
 import { EmailView } from "./EmailView";
 import { TasksView } from "./TasksView";
 import { Palette, type PaletteItem } from "./Palette";
@@ -245,7 +246,7 @@ function Shell() {
     void hub().setBadge(unread.size);
   }, [unread]);
 
-  const current = selected && selected !== NEW && selected !== CLOUD && selected !== TASKS && selected !== EMAIL && selected !== CALENDAR && selected !== SETTINGS ? sessions[selected] : undefined;
+  const current = selected && selected !== NEW && selected !== CLOUD && selected !== ANALYTICS && selected !== TASKS && selected !== EMAIL && selected !== CALENDAR && selected !== SETTINGS ? sessions[selected] : undefined;
   const pane = current ? (panes[current.id] ?? { open: false, tabs: [] }) : undefined;
   const togglePane = () => current && updatePane(current.id, (p) => ({ ...p, open: !p.open }));
 
@@ -486,6 +487,8 @@ function Shell() {
               <SessionView key={current.id} session={current} dropZone={mainRef} />
             ) : selected === CLOUD ? (
               <CloudView sessions={sessions} dropZone={mainRef} onOpen={select} />
+            ) : selected === ANALYTICS ? (
+              <AnalyticsView />
             ) : selected === TASKS ? (
               <TasksView sessions={sessions} onOpen={select} />
             ) : selected === EMAIL ? (
