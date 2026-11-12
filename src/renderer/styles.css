@@ -1899,3 +1899,10 @@ pre.code { position: relative; }
 /* Cloud: severity is a dot, not a bar down the row's edge. */
 .cl-issue { grid-template-columns: 8px 28px 38px minmax(0, 1fr) auto; }
 .cl-sev { align-self: start; width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--dim2); }
+
+/* render crash fallback */
+.crash { height: 100vh; display: flex; flex-direction: column; gap: 10px; padding: 48px; background: var(--bg); color: var(--fg); }
+.crash-title { font-weight: 600; }
+.crash-msg { color: var(--bad); }
+.crash-acts { display: flex; gap: 6px; }
+.crash-raw { font: 11px/1.45 var(--fm); color: var(--dim); white-space: pre-wrap; overflow: auto; }

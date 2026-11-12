@@ -1329,6 +1329,13 @@ export class Hub implements SessionHost {
           if (t) meta.title = t;
           meta.titleSource = "auto";
         }
+        // Older builds saved deploy entries with flat flags ({ backend: true, frontend: false }) instead of parts.
+        for (const d of meta.git?.deploys ?? []) {
+          if (d.parts) continue;
+          const { tenant, full, touched, ...flags } = d as any;
+          d.parts = Object.fromEntries(Object.entries(flags).filter(([, v]) => typeof v === "boolean")) as Record<string, boolean>;
+          for (const k of Object.keys(d.parts)) delete (d as any)[k];
+        }
         const s = this.instantiate(meta, items);
         s.costUsd = costUsd;
         s.tokens = tokens;

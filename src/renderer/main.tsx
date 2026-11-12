@@ -10,6 +10,7 @@ import "@fontsource/ibm-plex-sans/600.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import { App } from "./App";
+import { CrashGuard } from "./Crash";
 import { PairScreen, createRemoteHub, isWeb } from "./remote";
 import "./styles.css";
 
@@ -21,8 +22,8 @@ if (isWeb) {
   (window as { hub?: unknown }).hub = createRemoteHub(showPair, (up) => document.documentElement.classList.toggle("offline", !up));
   fetch("/api/me")
     .then((r) => r.json())
-    .then((me) => (me.paired ? root.render(<App />) : showPair()))
+    .then((me) => (me.paired ? root.render(<CrashGuard><App /></CrashGuard>) : showPair()))
     .catch(showPair);
 } else {
-  root.render(<App />);
+  root.render(<CrashGuard><App /></CrashGuard>);
 }
