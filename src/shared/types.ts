@@ -151,8 +151,6 @@ export interface ProjectConfig {
     keySecret?: { project: string; name: string };
     /** Site host ($host) → environment id. Events from other hosts are left out. */
     hosts?: Record<string, string>;
-    /** Email suffixes of your own team, hidden with "hide team". */
-    internal?: string[];
   };
 }
 
@@ -160,8 +158,8 @@ export interface AnalyticsQuery {
   range: "1h" | "24h" | "7d" | "30d";
   /** Environment id, or all. */
   env?: string;
-  person?: string;
-  hideInternal?: boolean;
+  /** Only these people (emails); empty = everyone. */
+  people?: string[];
 }
 
 export interface AnalyticsEvent {

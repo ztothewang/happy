@@ -54,15 +54,16 @@ export async function analytics(cfg: ProjectConfig, opts: AnalyticsQuery): Promi
   const envHosts = opts.env ? allHosts.filter((h) => hosts[h] === opts.env) : allHosts;
   if (envHosts.length) where.push(`properties.$host IN (${envHosts.map(q).join(",")})`);
   where.push("person.properties.email IS NOT NULL AND person.properties.email != ''");
-  if (opts.hideInternal) for (const s of a.internal ?? []) where.push(`NOT (coalesce(person.properties.email, '') ILIKE ${q(`%${s}`)})`);
-  if (opts.person) where.push(`person.properties.email = ${q(opts.person)}`);
+  // The people list ignores the people picked (so you can pick more); everything else follows them.
+  const everyone = where.join(" AND ");
+  if (opts.people?.length) where.push(`person.properties.email IN (${opts.people.map(q).join(",")})`);
   const base = where.join(" AND ");
   const quiet = `event NOT IN (${NOISE.map(q).join(",")})`;
   const link = `${(a.host ?? "https://us.posthog.com").replace(/\/$/, "")}/project/${a.projectId}`;
   try {
     const [byHost, people, top, feed] = await Promise.all([
       hogql(a, `SELECT properties.$host h, uniq(person_id), count() FROM events WHERE ${base} GROUP BY h`),
-      hogql(a, `SELECT person.properties.email e, any(properties.$host), count(), max(timestamp) m FROM events WHERE ${base} AND e IS NOT NULL AND e != '' GROUP BY e ORDER BY m DESC LIMIT 300`),
+      hogql(a, `SELECT person.properties.email e, any(properties.$host), count(), max(timestamp) m FROM events WHERE ${everyone} AND e IS NOT NULL AND e != '' GROUP BY e ORDER BY m DESC LIMIT 300`),
       hogql(a, `SELECT event, count() c, uniq(person_id) FROM events WHERE ${base} AND ${quiet} GROUP BY event ORDER BY c DESC LIMIT 40`),
       hogql(a, `SELECT timestamp, event, person.properties.email, properties.$host, properties.$pathname, properties.$event_type, elements_chain_texts, uuid FROM events WHERE ${base} AND ${quiet} ORDER BY timestamp DESC LIMIT 300`),
     ]);

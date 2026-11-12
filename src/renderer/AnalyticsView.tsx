@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react";
-import type {
-  AnalyticsEvent,
-  AnalyticsEventDetail,
-  AnalyticsQuery,
-  AnalyticsSnapshot,
-} from "../shared/types";
+import type { AnalyticsEvent, AnalyticsEventDetail, AnalyticsQuery, AnalyticsSnapshot } from "../shared/types";
 import { hub } from "./App";
 import { tenantColor } from "./charts";
 import { num } from "./models";
@@ -14,13 +9,7 @@ const REFRESH_MS = 30_000;
 
 const ago = (ts: number) => {
   const s = Math.round((Date.now() - ts) / 1000);
-  return s < 60
-    ? `${Math.max(s, 0)}s`
-    : s < 3600
-      ? `${Math.round(s / 60)}m`
-      : s < 172800
-        ? `${Math.round(s / 3600)}h`
-        : `${Math.round(s / 86400)}d`;
+  return s < 60 ? `${Math.max(s, 0)}s` : s < 3600 ? `${Math.round(s / 60)}m` : s < 172800 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86400)}d`;
 };
 const clock = (ts: number) =>
   new Date(ts).toLocaleTimeString([], {
@@ -41,23 +30,22 @@ const what = (e: AnalyticsEvent) =>
           ? "error"
           : e.event.replace(/^\$/, "");
 
-type Prefs = Omit<AnalyticsQuery, "person"> & { peopleOpen?: boolean };
+type Prefs = Omit<AnalyticsQuery, "people"> & { peopleOpen?: boolean };
 const readPrefs = (): Prefs => {
   try {
-    return {
-      range: "24h",
-      hideInternal: true,
-      ...JSON.parse(localStorage.getItem("analytics-prefs") ?? "{}"),
-    };
+    const { range = "24h", env, peopleOpen } = JSON.parse(localStorage.getItem("analytics-prefs") ?? "{}") as Prefs;
+    return { range, env, peopleOpen };
   } catch {
-    return { range: "24h", hideInternal: true };
+    return { range: "24h" };
   }
 };
 
 /** Product events from PostHog: active people per environment, top events, and a live feed. */
 export function AnalyticsView() {
   const [prefs, setPrefs] = useState(readPrefs);
-  const [person, setPerson] = useState<string>();
+  /** People picked in the list: the feed and top events show only them (none picked = everyone). */
+  const [picked, setPicked] = useState<string[]>([]);
+  const toggle = (email: string) => setPicked((xs) => (xs.includes(email) ? xs.filter((x) => x !== email) : [...xs, email]));
   const [snap, setSnap] = useState<AnalyticsSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
@@ -76,8 +64,7 @@ export function AnalyticsView() {
       .analytics({
         range: prefs.range,
         env: prefs.env,
-        hideInternal: prefs.hideInternal,
-        person,
+        people: picked,
       })
       .then((s) => live && setSnap(s))
       .finally(() => live && setLoading(false));
@@ -86,18 +73,15 @@ export function AnalyticsView() {
       live = false;
       clearTimeout(t);
     };
-  }, [prefs.range, prefs.env, prefs.hideInternal, person, tick]);
+  }, [prefs.range, prefs.env, picked.join(","), tick]);
 
   const set = (p: Partial<typeof prefs>) => setPrefs((x) => ({ ...x, ...p }));
-  const envName = (id?: string) =>
-    snap?.envs.find((e) => e.id === id)?.name ?? id ?? "";
+  const envName = (id?: string) => snap?.envs.find((e) => e.id === id)?.name ?? id ?? "";
   const dot = (id?: string) => (
     <span
       className="an-dot"
       style={{
-        background: id
-          ? (snap?.envs.find((e) => e.id === id)?.color ?? tenantColor(id))
-          : "var(--dim2)",
+        background: id ? (snap?.envs.find((e) => e.id === id)?.color ?? tenantColor(id)) : "var(--dim2)",
       }}
       title={envName(id)}
     />
@@ -107,9 +91,7 @@ export function AnalyticsView() {
   if (snap && !snap.configured)
     return (
       <div className="muted pad center small">
-        Analytics isn't set up for this project. Add an <code>analytics</code>{" "}
-        block (PostHog project id, key file or secret, and site hosts per
-        environment) to the project config.
+        Analytics isn't set up for this project. Add an <code>analytics</code> block (PostHog project id, key file or secret, and site hosts per environment) to the project config.
       </div>
     );
 
@@ -118,14 +100,9 @@ export function AnalyticsView() {
       <div className="cl-main an-main">
         <div className="cl-tabs">
           <span className="an-tabs">
-            <button
-              className={`cl-tab ${!prefs.env ? "on" : ""}`}
-              onClick={() => set({ env: undefined })}
-            >
+            <button className={`cl-tab ${!prefs.env ? "on" : ""}`} onClick={() => set({ env: undefined })}>
               all
-              {totalUsers > 0 && (
-                <span className="cl-n">{num(totalUsers)}</span>
-              )}
+              {totalUsers > 0 && <span className="cl-n">{num(totalUsers)}</span>}
             </button>
             {snap?.envs.map((e) => (
               <button
@@ -142,35 +119,17 @@ export function AnalyticsView() {
           <span className="cl-tabs-right">
             <span className="an-seg">
               {RANGES.map((r) => (
-                <button
-                  key={r}
-                  className={`kb ${prefs.range === r ? "on" : ""}`}
-                  onClick={() => set({ range: r })}
-                >
+                <button key={r} className={`kb ${prefs.range === r ? "on" : ""}`} onClick={() => set({ range: r })}>
                   {r}
                 </button>
               ))}
             </span>
-            <button
-              className={`kb ${prefs.hideInternal ? "on" : ""}`}
-              title="Hide your own team"
-              onClick={() => set({ hideInternal: !prefs.hideInternal })}
-            >
-              hide team
-            </button>
             {snap?.link && (
-              <button
-                className="kb"
-                onClick={() => void hub().openInChrome(snap.link!)}
-              >
+              <button className="kb" onClick={() => void hub().openInChrome(snap.link!)}>
                 PostHog
               </button>
             )}
-            <button
-              className="kb"
-              disabled={loading}
-              onClick={() => setTick((n) => n + 1)}
-            >
+            <button className="kb" disabled={loading} onClick={() => setTick((n) => n + 1)}>
               {loading ? "loading…" : "refresh"}
             </button>
           </span>
@@ -185,165 +144,88 @@ export function AnalyticsView() {
                 <h3>top events</h3>
                 <div className="an-top">
                   {snap.top.map((t) => (
-                    <span
-                      key={t.event}
-                      className="an-chip"
-                      title={`${num(t.users)} people`}
-                    >
+                    <span key={t.event} className="an-chip" title={`${num(t.users)} people`}>
                       {t.event.replace(/^\$/, "")} <b>{num(t.count)}</b>
                     </span>
                   ))}
                 </div>
               </div>
               <div className="card">
-                <h3
-                  className="an-fold"
-                  onClick={() => set({ peopleOpen: !prefs.peopleOpen })}
-                >
-                  <span className="err-caret">
-                    {prefs.peopleOpen ? "▾" : "▸"}
+                <h3>
+                  <span className="an-fold" onClick={() => set({ peopleOpen: !prefs.peopleOpen })}>
+                    <span className="err-caret">{prefs.peopleOpen ? "▾" : "▸"}</span> people <span className="ov-count">{num(snap.people.length)}</span>
                   </span>
-                  people{" "}
-                  <span className="ov-count">{num(snap.people.length)}</span>
+                  {picked.length > 0 && (
+                    <>
+                      <span className="ov-count">· showing {num(picked.length)}</span>
+                      <button className="kb" onClick={() => setPicked([])}>
+                        everyone
+                      </button>
+                    </>
+                  )}
                 </h3>
                 {prefs.peopleOpen && (
                   <div className="an-people">
                     {snap.people.map((p) => (
-                      <button
-                        key={p.email}
-                        className={`an-row ${person === p.email ? "on" : ""}`}
-                        onClick={() =>
-                          setPerson(person === p.email ? undefined : p.email)
-                        }
-                      >
+                      <button key={p.email} className={`an-row ${picked.includes(p.email) ? "on" : ""}`} onClick={() => toggle(p.email)}>
+                        <input type="checkbox" readOnly tabIndex={-1} checked={picked.includes(p.email)} />
                         {dot(p.env)}
                         <span className="an-email">{p.email}</span>
-                        <span className="muted mono small">
-                          {num(p.events)}
-                        </span>
-                        <span className="muted mono small an-ago">
-                          {ago(p.lastSeen)}
-                        </span>
+                        <span className="muted mono small">{num(p.events)}</span>
+                        <span className="muted mono small an-ago">{ago(p.lastSeen)}</span>
                       </button>
                     ))}
-                    {!snap.people.length && (
-                      <div className="muted small">No one in this range.</div>
-                    )}
+                    {!snap.people.length && <div className="muted small">No one in this range.</div>}
                   </div>
                 )}
               </div>
               <div className="card">
                 <h3>
-                  {person ? (
-                    <>
-                      {person}
-                      <button
-                        className="kb"
-                        onClick={() => setPerson(undefined)}
-                      >
-                        everyone
-                      </button>
-                    </>
-                  ) : (
-                    "latest"
-                  )}
-                  <span className="ov-count">
-                    every 30s · double-click for details
-                  </span>
+                  {picked.length === 1 ? picked[0] : picked.length ? `${num(picked.length)} people` : "latest"}
+                  <span className="ov-count">every 30s · double-click for details</span>
                 </h3>
                 {snap.feed.map((e) => (
-                  <div
-                    key={e.id}
-                    className={`an-ev ${open?.id === e.id ? "on" : ""}`}
-                    onDoubleClick={() => setOpen(e)}
-                  >
-                    <span
-                      className="muted mono small an-time"
-                      title={new Date(e.ts).toLocaleString()}
-                    >
+                  <div key={e.id} className={`an-ev ${open?.id === e.id ? "on" : ""}`} onDoubleClick={() => setOpen(e)}>
+                    <span className="muted mono small an-time" title={new Date(e.ts).toLocaleString()}>
                       {clock(e.ts)}
                     </span>
                     {dot(e.env)}
-                    <button
-                      className="an-who"
-                      disabled={!e.email}
-                      onClick={() => e.email && setPerson(e.email)}
-                    >
+                    <button className="an-who" disabled={!e.email} title="Pick this person (or unpick)" onClick={() => e.email && toggle(e.email)}>
                       {e.email ?? "anonymous"}
                     </button>
-                    <span
-                      className={`an-what ${e.event === "$exception" || e.event === "$rageclick" ? "bad" : e.event.startsWith("$") ? "" : "custom"}`}
-                    >
-                      {what(e)}
-                    </span>
-                    {e.event !== "$pageview" && e.path && (
-                      <span className="muted small an-path">{e.path}</span>
-                    )}
+                    <span className={`an-what ${e.event === "$exception" || e.event === "$rageclick" ? "bad" : e.event.startsWith("$") ? "" : "custom"}`}>{what(e)}</span>
+                    {e.event !== "$pageview" && e.path && <span className="muted small an-path">{e.path}</span>}
                   </div>
                 ))}
-                {!snap.feed.length && (
-                  <div className="muted small">No events in this range.</div>
-                )}
+                {!snap.feed.length && <div className="muted small">No events in this range.</div>}
               </div>
             </>
           )}
         </div>
       </div>
-      {open && (
-        <EventDetail
-          key={open.id}
-          e={open}
-          envName={envName(open.env)}
-          onPerson={(p) => setPerson(p)}
-          onClose={() => setOpen(undefined)}
-        />
-      )}
+      {open && <EventDetail key={open.id} e={open} envName={envName(open.env)} onPerson={(p) => !picked.includes(p) && toggle(p)} onClose={() => setOpen(undefined)} />}
     </div>
   );
 }
 
 /** Everything PostHog has on one event: the basics, then every property (yours first, PostHog's after). */
-function EventDetail({
-  e,
-  envName,
-  onPerson,
-  onClose,
-}: {
-  e: AnalyticsEvent;
-  envName: string;
-  onPerson(p: string): void;
-  onClose(): void;
-}) {
+function EventDetail({ e, envName, onPerson, onClose }: { e: AnalyticsEvent; envName: string; onPerson(p: string): void; onClose(): void }) {
   const [d, setD] = useState<AnalyticsEventDetail>();
   const [err, setErr] = useState<string>();
   const [showEl, setShowEl] = useState(false);
   useEffect(() => {
     hub()
       .analyticsEvent(e.id, e.ts)
-      .then(setD, (x: Error) =>
-        setErr(
-          x.message.replace(
-            /^Error invoking remote method '[^']+': (Error: )?/,
-            "",
-          ),
-        ),
-      );
+      .then(setD, (x: Error) => setErr(x.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "")));
   }, [e.id, e.ts]);
-  const props = Object.entries(d?.properties ?? {}).sort(
-    ([a], [b]) =>
-      Number(a.startsWith("$")) - Number(b.startsWith("$")) ||
-      a.localeCompare(b),
-  );
+  const props = Object.entries(d?.properties ?? {}).sort(([a], [b]) => Number(a.startsWith("$")) - Number(b.startsWith("$")) || a.localeCompare(b));
   const val = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
   return (
     <aside className="cal-side an-side">
       <div className="cal-side-acts">
         <span className="muted small cal-form-label">{e.event}</span>
         {d && (
-          <button
-            className="kb"
-            onClick={() => void hub().openInChrome(d.link)}
-          >
+          <button className="kb" onClick={() => void hub().openInChrome(d.link)}>
             PostHog
           </button>
         )}
@@ -406,14 +288,10 @@ function EventDetail({
             <div className="an-sub">person</div>
             <div className="an-props">
               {Object.entries(d.person)
-                .filter(
-                  ([k]) => !k.startsWith("$initial") && !k.startsWith("$geoip"),
-                )
+                .filter(([k]) => !k.startsWith("$initial") && !k.startsWith("$geoip"))
                 .map(([k, v]) => (
                   <div key={k} className="an-prop">
-                    <span className={k.startsWith("$") ? "muted" : ""}>
-                      {k}
-                    </span>
+                    <span className={k.startsWith("$") ? "muted" : ""}>{k}</span>
                     <span className="mono">{val(v)}</span>
                   </div>
                 ))}
