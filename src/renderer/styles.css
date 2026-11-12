@@ -97,7 +97,10 @@ input:focus, textarea:focus { border-color: color-mix(in srgb, var(--accent) 60%
 /* ── sidebar ───────────────────────────────────────────────── */
 .sidebar { width: 340px; min-width: 0; flex-shrink: 0; background: var(--side); border-right: 1px solid var(--div); display: flex; flex-direction: column; padding: 8px 6px; min-height: 0; }
 .filter { display: flex; gap: 4px; margin: 0 2px 6px; }
-.filter input { flex: 1; min-width: 0; font: 11.5px var(--fm); padding: 4px 8px; background: transparent; }
+.filter-box { flex: 1; min-width: 0; position: relative; display: flex; }
+.filter-clear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--hover); color: var(--dim); font-size: 13px; line-height: 1; padding: 0; display: grid; place-items: center; }
+.filter-clear:hover { color: var(--fg); background: var(--div); }
+.filter input { flex: 1; min-width: 0; padding-right: 26px !important; font: 11.5px var(--fm); padding: 4px 8px; background: transparent; }
 .filter input::placeholder { color: var(--dim); }
 .rows { flex: 1; overflow-y: auto; margin: 0 -2px; padding: 0 2px; }
 .section-wrap { border-radius: 6px; }

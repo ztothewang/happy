@@ -787,6 +787,7 @@ export function Sidebar(props: {
     <aside className="sidebar" style={{ width: props.width }} onDragStart={() => onHover(null)} onScroll={() => onHover(null)}>
       <div className="filter">
         <img className={`logo logo-btn ${props.selected === STATS ? "on" : ""}`} src="apple-touch-icon.png" alt="Happy" title="Your stats" draggable={false} onClick={() => props.onSelect(STATS)} />
+        <span className="filter-box">
         <input
           id="session-filter"
           value={props.filter}
@@ -800,6 +801,12 @@ export function Sidebar(props: {
           }}
           spellCheck={false}
         />
+        {props.filter && (
+          <button className="filter-clear" title="Clear filter (Esc)" onClick={() => props.onFilter("")}>
+            ×
+          </button>
+        )}
+        </span>
         <button className={`icon-btn ${props.selected === SETTINGS ? "on" : ""}`} title="Settings (⌘,)" onClick={() => props.onSelect(SETTINGS)}>
           <Settings size={15} />
         </button>
