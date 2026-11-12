@@ -255,7 +255,7 @@ app.whenReady().then(async () => {
   handle("hub:linkWorktree", (id: string, path: string) => hub.linkWorktree(id, path));
   handle("hub:unlinkWorktree", (id: string, path: string) => hub.unlinkWorktree(id, path));
   handle("hub:send", (id: string, text: string, images?: string[], files?: string[]) =>
-    hub.get(id).post(text, images, files),
+    (hub.freshenGit(id), hub.get(id).post(text, images, files)),
   );
   handle("hub:setModel", (id: string, model: string | null) => hub.setModel(id, model));
   handle("hub:setCodexSandbox", (id: string, mode) => hub.setCodexSandbox(id, mode));

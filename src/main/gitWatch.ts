@@ -118,6 +118,12 @@ export class GitWatch {
     r.fetchedAt = Date.now();
   }
 
+  /** Re-read tags for the checkout containing `cwd` (each checkout keeps its own tag cache). */
+  async refreshFor(cwd: string) {
+    const root = await git(cwd, ["rev-parse", "--show-toplevel"]).catch(() => "");
+    if (root) await this.refresh(root);
+  }
+
   /** Re-read tags and refs now (after a deploy). */
   async refresh(root: string) {
     const r = this.repos.get(root);

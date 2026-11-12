@@ -472,6 +472,21 @@ export class Hub implements SessionHost {
     return existsSync(settings().repo) ? settings().repo : homedir();
   }
 
+  private tagsFreshenedAt = new Map<string, number>();
+  /** You sent a message: re-read deploy tags (at most every 30s per repo) and re-check this chat's branch, so a deploy done elsewhere shows up now. */
+  freshenGit(id: string) {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    void (async () => {
+      const cwd = s.meta.cwd;
+      if (Date.now() - (this.tagsFreshenedAt.get(cwd) ?? 0) > 30_000) {
+        this.tagsFreshenedAt.set(cwd, Date.now());
+        await this.gitWatch.refreshFor(cwd).catch(() => {});
+      }
+      this.refreshGit(s, true);
+    })();
+  }
+
   /** After a deploy: pick up the new tags and rebuild the board's deploy strip. */
   async refreshDeploys() {
     const root = settings().repo && (await this.gitWatch.worktrees(settings().repo))?.root;
