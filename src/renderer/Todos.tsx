@@ -226,6 +226,13 @@ export function TodoFloat({ s }: { s: SessionState }) {
   );
 }
 
+/** Grow a textarea to its content, so a one-line message edits as one line. */
+const fitHeight = (el: HTMLTextAreaElement | null) => {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight + 2}px`;
+};
+
 /** Messages sent while the agent works: wait for the turn to end; edit, take back, or send now. */
 export function QueuedMessages({ s, mobile }: { s: SessionState; mobile?: boolean }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -237,14 +244,19 @@ export function QueuedMessages({ s, mobile }: { s: SessionState; mobile?: boolea
   return (
     <div className={mobile ? "mx-queued" : "queued"}>
       {q.map((m) => (
-        <div key={m.id} className="q-row">
+        <div key={m.id} className={editing === m.id ? "q-row q-editing" : "q-row"}>
           <span className="q-tag">queued</span>
           {editing === m.id ? (
             <textarea
               className="q-edit"
               autoFocus
+              rows={1}
+              ref={fitHeight}
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                fitHeight(e.target);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

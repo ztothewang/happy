@@ -1389,12 +1389,14 @@ select.mx-btn { appearance: none; text-align: center; text-align-last: center; }
 .mx-todos .td-go { width: 36px; height: 36px; }
 
 /* Queued messages (sent while the agent works). */
-.queued { display: flex; flex-direction: column; gap: 4px; margin: 6px 20px 4px 138px; }
+.queued { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin: 6px 20px 4px 138px; max-width: 720px; }
+.queued .q-row { max-width: 100%; }
+.queued .q-row.q-editing { align-self: stretch; }
 .log.no-ts .queued { margin-left: 74px; }
 .q-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border: 1px dashed var(--div); border-radius: 8px; background: var(--raise); font-size: 13px; }
 .q-tag { font: 500 10px var(--fm); color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; padding-top: 2px; flex-shrink: 0; }
 .q-text { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--dim); }
-.q-edit { flex: 1; min-width: 0; min-height: 54px; font: 13px var(--f); background: var(--bg); color: var(--fg); border: 1px solid var(--div); border-radius: 6px; padding: 5px 7px; resize: vertical; }
+.q-edit { flex: 1; min-width: 0; font: 13px/1.4 var(--f); overflow: hidden; background: var(--bg); color: var(--fg); border: 1px solid var(--div); border-radius: 6px; padding: 2px 6px; resize: none; }
 .q-acts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .q-acts button { border: 0; background: none; color: var(--dim); font: 11.5px var(--fm); padding: 2px 4px; border-radius: 4px; cursor: pointer; display: inline-flex; }
 .q-acts button:hover { color: var(--fg); background: var(--hover); }
