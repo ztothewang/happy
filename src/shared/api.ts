@@ -20,6 +20,7 @@ export function makeApi(invoke: Invoke, listen: Listen, extras: { pathForFile(fi
   setCursorMode: (id, mode) => invoke("hub:setCursorMode", id, mode),
   setTags: (id, tags) => invoke("hub:setTags", id, tags),
   setArchived: (id, archived) => invoke("hub:setArchived", id, archived),
+  setQaDone: (id, heads) => invoke("hub:setQaDone", id, heads),
   removeWorktree: (id) => invoke("hub:removeWorktree", id),
   forkSession: (id) => invoke("hub:fork", id),
   listWorktrees: (id) => invoke("hub:listWorktrees", id),

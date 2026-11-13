@@ -1791,7 +1791,8 @@ pre.code { position: relative; }
 .sc-stage.s-uncommitted { color: var(--stage-u); background: color-mix(in srgb, var(--stage-u) 14%, transparent); }
 .sc-stage.s-committed { color: var(--stage-c); background: color-mix(in srgb, var(--stage-c) 14%, transparent); }
 .sc-stage.s-merged { color: var(--stage-m); background: color-mix(in srgb, var(--stage-m) 14%, transparent); }
-.sc-stage.s-deployed { color: var(--dim); background: color-mix(in srgb, var(--dim) 12%, transparent); }
+.sc-stage.s-deployed, .sc-stage.s-done { color: var(--dim); background: color-mix(in srgb, var(--dim) 12%, transparent); }
+.sc-stage.s-qa { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .mx-rowsub { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mx-rowsub .sc-stage { font-size: 12.5px; line-height: 18px; padding: 0 6px; border-radius: 4px; }
 .mx-rowsub .r-tag { font-size: 12.5px; }

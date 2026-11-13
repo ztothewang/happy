@@ -265,6 +265,7 @@ app.whenReady().then(async () => {
   handle("hub:setCursorMode", (id: string, mode) => hub.setCursorMode(id, mode));
   handle("hub:setTags", (id: string, tags: string[]) => hub.setTags(id, tags));
   handle("hub:setArchived", (id: string, archived: boolean) => hub.setArchived(id, archived));
+  handle("hub:setQaDone", (id: string, heads: string[] | null) => hub.get(id).update({ qaDone: heads ? { heads, at: Date.now() } : undefined }));
   handle("hub:moveToGroup", (id: string, groupId: string | null) => hub.moveToGroup(id, groupId));
   handle("hub:groups", () => hub.groups());
   handle("hub:createGroup", (name: string) => hub.createGroup(name));

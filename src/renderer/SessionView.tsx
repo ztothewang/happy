@@ -13,6 +13,7 @@ import { baseName, fileUrl, isImagePath, usePane } from "./pane";
 import { useToast } from "./toast";
 import { NextSteps } from "./NextSteps";
 import { LinkCards, openLightbox } from "./Lightbox";
+import { stageLabel, workHeads } from "./Sidebar";
 
 /** mcp__browser__navigate → browser.navigate */
 const toolLabel = (t?: string) => {
@@ -532,6 +533,18 @@ export function SessionView({
         {s.items.some((i) => i.pinned) && (
           <button className="td-pill" onClick={() => pane.open({ kind: "pins" })} title="Pinned replies (opens in the side pane)">
             <Pin size={12} /> {s.items.filter((i) => i.pinned).length}
+          </button>
+        )}
+        {stageLabel(s) === "qa" && (
+          <button
+            className="kb pri"
+            title="You've checked the deployed work: mark this chat done (new commits put it back in QA)"
+            onClick={() => {
+              void hub().setQaDone(s.id, workHeads(s));
+              toast(`QA done · “${s.title}”`, { label: "undo", run: () => hub().setQaDone(s.id, null) });
+            }}
+          >
+            QA done
           </button>
         )}
         {s.routineId && <RoutineRunsFloat s={s} />}

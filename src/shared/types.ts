@@ -45,6 +45,8 @@ export interface SessionMeta {
   /** Free-form labels, e.g. "backfill". */
   tags?: string[];
   archived?: boolean;
+  /** You checked the deployed work by hand at these commits (the chat's checkouts' HEADs); new commits put it back in QA. */
+  qaDone?: { heads: string[]; at: number };
   /** Current git branch of cwd, refreshed after turns. */
   gitBranch?: string;
   git?: GitInfo;
@@ -1133,6 +1135,8 @@ export interface HubApi {
   setCursorMode(id: string, mode: CursorMode): Promise<void>;
   setTags(id: string, tags: string[]): Promise<void>;
   setArchived(id: string, archived: boolean): Promise<void>;
+  /** Mark the deployed work QA'd at these commits (null = back to QA). */
+  setQaDone(id: string, heads: string[] | null): Promise<void>;
   removeWorktree(id: string): Promise<{ branchDeleted: boolean }>;
   /** A copy of the chat that continues from here (Claude and Codex); returns the new chat. */
   forkSession(id: string): Promise<SessionState>;

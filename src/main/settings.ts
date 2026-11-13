@@ -15,7 +15,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     { name: "backfill", description: "The changes include a backfill script that still has to be run.", auto: true },
     { name: "migration", description: "The changes include a database migration that hasn't been applied yet.", auto: true },
     { name: "mcp", description: "The MCP server changed, and the new version still needs publishing to npm.", auto: true },
-    { name: "qa", description: "A person needs to review or test this by hand.", auto: false },
   ],
   autoTags: true,
   nextSteps: true,
@@ -35,7 +34,10 @@ function merge(raw: Partial<AppSettings>): AppSettings {
     remote: { ...DEFAULT_SETTINGS.remote, ...raw.remote },
     repo: raw.repo || DEFAULT_SETTINGS.repo,
     tags: Array.isArray(raw.tags)
-      ? (raw.tags as Array<TagDef | string>).map((t) => (typeof t === "string" ? (DEFAULT_SETTINGS.tags.find((d) => d.name === t) ?? { name: t, description: "", auto: false }) : t))
+      ? (raw.tags as Array<TagDef | string>)
+          // "qa" used to be a tag; it's the stage after deployed now.
+          .filter((t) => (typeof t === "string" ? t : t.name) !== "qa")
+          .map((t) => (typeof t === "string" ? (DEFAULT_SETTINGS.tags.find((d) => d.name === t) ?? { name: t, description: "", auto: false }) : t))
       : DEFAULT_SETTINGS.tags,
     autoTags: raw.autoTags ?? DEFAULT_SETTINGS.autoTags,
     nextSteps: raw.nextSteps ?? DEFAULT_SETTINGS.nextSteps,

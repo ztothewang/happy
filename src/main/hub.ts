@@ -1347,6 +1347,8 @@ export class Hub implements SessionHost {
           if (t) meta.title = t;
           meta.titleSource = "auto";
         }
+        // "qa" was a tag; it's the stage after deployed now.
+        if (meta.tags?.includes("qa")) meta.tags = meta.tags.filter((t) => t !== "qa").length ? meta.tags.filter((t) => t !== "qa") : undefined;
         // Older builds saved deploy entries with flat flags ({ backend: true, frontend: false }) instead of parts.
         for (const d of meta.git?.deploys ?? []) {
           if (d.parts) continue;

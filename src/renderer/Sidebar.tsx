@@ -16,7 +16,7 @@ import { useToast } from "./toast";
 export const DRAG_TYPE = "application/x-session-id";
 const STATUS_ALIASES: Record<string, string> = { running: "running", waiting: "needs_permission", error: "error", failed: "error", idle: "idle" };
 
-/** Filter syntax: free text matches titles; tag:x, is:running|waiting|error|idle|background, eng:cc|cx. */
+/** Filter syntax: free text matches titles; tag:x, is:running|waiting|error|idle|background or a stage (is:qa, is:done, is:merged…), eng:cc|cx. */
 export function matchesFilter(s: SessionState, q: string): boolean {
   for (const tok of q.trim().toLowerCase().split(/\s+/).filter(Boolean)) {
     const [k, v] = tok.includes(":") ? tok.split(/:(.*)/) : ["", tok];
@@ -25,6 +25,8 @@ export function matchesFilter(s: SessionState, q: string): boolean {
     } else if (k === "is") {
       if (v === "background" || v === "bg") {
         if (!inBackground(s)) return false;
+      } else if (STAGES.includes(v)) {
+        if (stageLabel(s) !== v) return false;
       } else if (s.status !== (STATUS_ALIASES[v] ?? v)) return false;
     } else if (k === "eng") {
       const alias = v === "cc" ? "claude" : v === "cx" ? "codex" : v;
@@ -34,6 +36,7 @@ export function matchesFilter(s: SessionState, q: string): boolean {
   return true;
 }
 
+const STAGES = ["uncommitted", "committed", "merged", "qa", "done"];
 const STATUS_WORD: Record<string, string> = { running: "running", needs_permission: "waiting", error: "failed" };
 
 /** Deploy state only belongs to a session when its branch did work (commits of its own, merged or not). */
@@ -119,10 +122,18 @@ export function sessionStage(s: SessionState): { stage?: Stage; deploy?: "pendin
   return { stage, deploy: ds.some((d) => !d.full && (d.touched ?? Object.keys(d.parts)).some((p) => !d.parts[p])) ? "pending" : "deployed" };
 }
 
-/** The stage pill a chat shows: merged-and-live reads "deployed". */
+/** The commits a chat's work is at (one per checkout): what a QA sign-off is tied to. */
+export const workHeads = (s: SessionState) => checkouts(s).map((c) => c.git?.head).filter((h): h is string => !!h).sort();
+
+/**
+ * The stage pill a chat shows. Merged and live everywhere is "qa" until you mark it checked, then "done"; new
+ * commits after that put it back in "qa". Merged but not live yet stays "merged".
+ */
 export function stageLabel(s: SessionState): string | undefined {
   const { stage, deploy } = sessionStage(s);
-  return stage === "merged" && deploy === "deployed" ? "deployed" : stage;
+  if (stage !== "merged" || deploy !== "deployed") return stage;
+  const heads = workHeads(s);
+  return s.qaDone && heads.length && heads.join() === [...s.qaDone.heads].sort().join() ? "done" : "qa";
 }
 
 /** The branch a chat is working on: its most recently active checkout. */
@@ -576,10 +587,8 @@ function Row(props: {
 export function RowSub({ s, onTag }: { s: SessionState; onTag(t: string): void }) {
   const busy = s.preparing || s.status !== "idle" || inBackground(s);
   const cls = s.preparing ? "running" : inBackground(s) ? "background" : s.status;
-  const { stage, deploy } = sessionStage(s);
-  if (!busy && !stage && !s.tags?.length) return null; // nothing to say: one line
-  // Merged and live everywhere reads "deployed"; merged but not live yet stays "merged" (the hover card has the details).
-  const label = stage === "merged" && deploy === "deployed" ? "deployed" : stage;
+  const label = stageLabel(s);
+  if (!busy && !label && !s.tags?.length) return null; // nothing to say: one line
   return (
     <span className="r-sub2">
       {busy && <span className={`r-st st ${cls}`}>{s.preparing ? "setting up" : inBackground(s) ? "background" : STATUS_WORD[s.status]}</span>}
