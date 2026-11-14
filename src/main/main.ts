@@ -1,7 +1,8 @@
-import { app, powerSaveBlocker, BrowserWindow, dialog, ipcMain, Menu, net, Notification, protocol, shell } from "electron";
+import { app, powerSaveBlocker, BrowserWindow, dialog, ipcMain, Menu, net, Notification, protocol, session, shell } from "electron";
 import { demo } from "./demo.js";
 import { runDemoShots } from "./demoShots.js";
 import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserManager } from "./browser.js";
@@ -588,6 +589,27 @@ app.whenReady().then(async () => {
   handle("browser:nav", (id: string, action) => browsers.nav(id, action));
   handle("browser:state", (id: string) => browsers.state(id));
   handle("browser:snapshot", (id: string) => browsers.snapshot(id));
+  // Recording: the pane asks for a capture stream; we hand it exactly that session's page (no screen-recording prompt).
+  let recordNext: string | undefined;
+  session.defaultSession.setDisplayMediaRequestHandler((_req, cb) => {
+    const frame = recordNext ? browsers.frameFor(recordNext) : undefined;
+    recordNext = undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    cb(frame ? { video: frame } : ({} as any));
+  });
+  handle("browser:recordStart", (id: string) => {
+    if (!browsers.frameFor(id)) throw new Error("Nothing open in this browser yet.");
+    recordNext = id;
+    browsers.recording.add(id);
+  });
+  handle("browser:recordStop", (id: string) => void browsers.recording.delete(id));
+  handle("browser:saveRecording", (name: string, data: ArrayBuffer) => {
+    const dir = join(app.getPath("videos"), "Happy");
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, name.replace(/[/\\:]/g, "-"));
+    writeFileSync(path, Buffer.from(data));
+    return path;
+  });
   handle("browser:edit", (id: string, action: BrowserEdit, x?: number, y?: number) => browsers.edit(id, action, x, y));
 
   createWindow();

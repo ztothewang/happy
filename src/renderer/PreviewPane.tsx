@@ -5,6 +5,7 @@ import { useMenu, type MenuItem } from "./Menu";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, Fragment } from "react";
 import type { BrowserMenu, BrowserState, DirEntry, FileContent, GitChange, TranscriptItem } from "../shared/types";
 import { hub } from "./App";
+import { useToast } from "./toast";
 import { diffLines, parseUnified, withContext, type DiffOp } from "./diff";
 import { Markdown, highlight } from "./Markdown";
 import { baseName, fileUrl, usePane, type PaneTab, isImagePath } from "./pane";
@@ -154,6 +155,7 @@ function BrowserView({ sessionId, state, hidden }: { sessionId: string; state?: 
   const menu = useMenu();
   /** While a menu is open over the pane: a picture of the page, standing in for the native view (which would cover the menu). */
   const [shot, setShot] = useState<string | null>(null);
+  const rec = useRecorder(sessionId);
 
   useEffect(() => {
     if (!editing) setUrl(state?.url ?? "");
@@ -261,6 +263,17 @@ function BrowserView({ sessionId, state, hidden }: { sessionId: string; state?: 
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && go()}
         />
+        {rec.on ? (
+          <button className="rec-btn on" onClick={rec.stop} title="Stop and save the recording">
+            <span className="rec-dot" />
+            {rec.elapsed}
+            <span className="rec-stop" />
+          </button>
+        ) : (
+          <button className="icon-btn rec-btn" onClick={rec.start} disabled={!state?.url || rec.saving} title="Record this browser (e.g. while the agent runs a demo)">
+            <span className="rec-dot" />
+          </button>
+        )}
       </div>
       <div className="browser-slot" ref={slot}>
         {shot && shot !== "blank" && <img className="browser-shot" src={shot} alt="" />}
@@ -268,6 +281,69 @@ function BrowserView({ sessionId, state, hidden }: { sessionId: string; state?: 
       </div>
     </div>
   );
+}
+
+/** Records a session's browser page to a video (MP4 when supported, else WebM), saved under ~/Movies/Happy. */
+function useRecorder(sessionId: string) {
+  const toast = useToast();
+  const [started, setStarted] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [, tick] = useState(0);
+  const rec = useRef<MediaRecorder | null>(null);
+
+  useEffect(() => {
+    if (!started) return;
+    const t = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, [started]);
+  // Leaving the chat (or closing the pane) ends and saves the recording.
+  useEffect(
+    () => () => {
+      if (rec.current?.state === "recording") rec.current.stop();
+    },
+    [sessionId],
+  );
+
+  const start = async () => {
+    try {
+      await hub().browserRecordStart(sessionId);
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
+      const type = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+      const r = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8_000_000 });
+      const chunks: Blob[] = [];
+      r.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      r.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setStarted(null);
+        void hub().browserRecordStop(sessionId);
+        setSaving(true);
+        try {
+          const d = new Date();
+          const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} at ${String(d.getHours()).padStart(2, "0")}.${String(d.getMinutes()).padStart(2, "0")}.${String(d.getSeconds()).padStart(2, "0")}`;
+          const blob = new Blob(chunks, { type: r.mimeType });
+          const path = await hub().saveRecording(`Browser recording ${stamp}.${r.mimeType.includes("mp4") ? "mp4" : "webm"}`, await blob.arrayBuffer());
+          toast(`Recording saved · ${baseName(path)}`, { label: "show", run: () => void hub().revealFile(path) });
+        } catch (e) {
+          toast(`Couldn't save the recording: ${(e as Error).message}`);
+        } finally {
+          setSaving(false);
+        }
+      };
+      // The page closing or the stream ending stops it too.
+      stream.getVideoTracks()[0]?.addEventListener("ended", () => r.state === "recording" && r.stop());
+      r.start(1000);
+      rec.current = r;
+      setStarted(Date.now());
+    } catch (e) {
+      void hub().browserRecordStop(sessionId);
+      toast(`Couldn't start recording: ${(e as Error).message}`);
+    }
+  };
+  const stop = () => {
+    if (rec.current?.state === "recording") rec.current.stop();
+  };
+  const secs = started ? Math.floor((Date.now() - started) / 1000) : 0;
+  return { on: !!started, saving, start, stop, elapsed: `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}` };
 }
 
 // ── files ───────────────────────────────────────────────────────────

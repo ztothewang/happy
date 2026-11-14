@@ -310,6 +310,13 @@ export class BrowserManager {
   }
 
   /** What the pane shows right now, as a data URL. */
+  /** Sessions whose browser you're recording: the cursor stays in the agent's screenshots so the video doesn't blink. */
+  readonly recording = new Set<string>();
+  /** The page to record (for getDisplayMedia). */
+  frameFor(sessionId: string) {
+    return this.browsers.get(sessionId)?.view.webContents.mainFrame;
+  }
+
   async snapshot(sessionId: string): Promise<string | null> {
     const b = this.browsers.get(sessionId);
     if (!b || this.shown !== sessionId) return null;
@@ -352,6 +359,7 @@ export class BrowserManager {
       navigate: (url: string) => b.navigate(url),
       back: () => b.view.webContents.navigationHistory.goBack(),
       screenshot: async () => {
+        if (this.recording.has(sessionId)) return b.screenshot();
         await b.pointerVisible(false);
         try {
           return await b.screenshot();

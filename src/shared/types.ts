@@ -1188,6 +1188,11 @@ export interface HubApi {
   onBrowserMenu(cb: (m: BrowserMenu) => void): () => void;
   /** The browser pane as an image (shown in its place while a menu is open over it). */
   browserSnapshot(sessionId: string): Promise<string | null>;
+  /** Next getDisplayMedia() call captures this session's browser page. */
+  browserRecordStart(sessionId: string): Promise<void>;
+  browserRecordStop(sessionId: string): Promise<void>;
+  /** Write a finished recording to ~/Movies/Happy; returns its path. */
+  saveRecording(name: string, data: ArrayBuffer): Promise<string>;
   browserEdit(sessionId: string, action: BrowserEdit, x?: number, y?: number): Promise<void>;
   onBrowserActivity(cb: (sessionId: string) => void): () => void;
   simplify(sessionId: string, itemId: string): Promise<void>;

@@ -1954,3 +1954,12 @@ pre.code { position: relative; }
 .an-what.bad { color: var(--bad); }
 .an-path { overflow: hidden; text-overflow: ellipsis; }
 .an .card h3 { display: flex; align-items: center; gap: 8px; }
+
+/* Browser recording. */
+.rec-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex-shrink: 0; }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); }
+.rec-btn:disabled .rec-dot { opacity: 0.35; }
+.rec-btn.on { border: 1px solid var(--div); background: var(--raise); color: var(--fg); font: 12px var(--fm); padding: 3px 8px; border-radius: 6px; cursor: pointer; }
+.rec-btn.on .rec-dot { animation: rec-pulse 1.2s ease-in-out infinite; }
+.rec-stop { width: 9px; height: 9px; border-radius: 2px; background: var(--fg); margin-left: 2px; }
+@keyframes rec-pulse { 50% { opacity: 0.3; } }
