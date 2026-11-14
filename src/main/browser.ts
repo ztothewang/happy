@@ -114,7 +114,73 @@ class SessionBrowser {
   eval<T = unknown>(js: string): Promise<T> {
     return this.view.webContents.executeJavaScript(js, true);
   }
+
+  /** The agent's cursor, drawn into the page (pointer-events off) so you can watch what it does. */
+  last?: { x: number; y: number };
+  async pointer(p: AgentPointer) {
+    const from = this.last ?? p;
+    this.last = { x: p.x, y: p.y };
+    await this.eval(`(${AGENT_CURSOR_JS})(${JSON.stringify({ ...p, from })})`).catch(() => {});
+  }
+
+  /** Hide or show the cursor, e.g. so the agent's own screenshots don't include it. */
+  pointerVisible(on: boolean) {
+    return this.eval(`{const h=document.getElementById('happy-agent-cursor');if(h)h.style.visibility='${on ? "visible" : "hidden"}'}`).catch(() => {});
+  }
 }
+
+export interface AgentPointer {
+  x: number;
+  y: number;
+  /** Who's driving: shown on the cursor's tag. */
+  name: string;
+  color: string;
+  action: "move" | "click" | "type" | "scroll";
+}
+
+/** Draws (or moves) the agent cursor. Lives in a shadow root on <html>, so page styles can't touch it and page text/refs ignore it. */
+const AGENT_CURSOR_JS = String.raw`function (o) {
+  const ID = 'happy-agent-cursor';
+  let host = document.getElementById(ID);
+  if (!host) {
+    host = document.createElement('div');
+    host.id = ID;
+    host.setAttribute('aria-hidden', 'true');
+    host.style.cssText = 'all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
+    const root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = '<style>' +
+      '.c{position:fixed;left:0;top:0;transition:transform .35s cubic-bezier(.3,.7,.3,1),opacity .4s;will-change:transform;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}' +
+      '.c svg{display:block}' +
+      '.t{position:absolute;left:15px;top:17px;font:600 11px/1 -apple-system,BlinkMacSystemFont,sans-serif;color:#fff;padding:4px 7px;border-radius:9px;white-space:nowrap}' +
+      '.r{position:fixed;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;border:2px solid;animation:r .55s ease-out forwards}' +
+      '@keyframes r{from{transform:scale(.3);opacity:1}to{transform:scale(1.6);opacity:0}}' +
+      '</style><div class="c"><svg width="20" height="22" viewBox="0 0 20 22"><path d="M2 1.5v17l4.6-4.3 3 6.6 3-1.4-3-6.4h6.2z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="t"></span></div>';
+    document.documentElement.appendChild(host);
+  }
+  const root = host.shadowRoot, c = root.querySelector('.c'), path = root.querySelector('path'), tag = root.querySelector('.t');
+  path.setAttribute('fill', o.color);
+  tag.style.background = o.color;
+  tag.textContent = o.action === 'type' ? o.name + ' · typing' : o.action === 'scroll' ? o.name + ' · scrolling' : o.name;
+  host.style.visibility = 'visible';
+  if (!c.dataset.on) {
+    c.style.transition = 'none';
+    c.style.transform = 'translate(' + (o.from.x - 2) + 'px,' + (o.from.y - 1) + 'px)';
+    c.getBoundingClientRect();
+    c.style.transition = '';
+    c.dataset.on = '1';
+  }
+  c.style.opacity = '1';
+  c.style.transform = 'translate(' + (o.x - 2) + 'px,' + (o.y - 1) + 'px)';
+  if (o.action === 'click') setTimeout(() => {
+    const r = document.createElement('div');
+    r.className = 'r';
+    r.style.left = o.x + 'px'; r.style.top = o.y + 'px'; r.style.borderColor = o.color;
+    root.appendChild(r);
+    setTimeout(() => r.remove(), 700);
+  }, 330);
+  clearTimeout(host._fade);
+  host._fade = setTimeout(() => { c.style.opacity = '0'; }, 6000);
+}`;
 
 const KEYS: Record<string, { key: string; code: string; windowsVirtualKeyCode: number; text?: string }> = {
   enter: { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" },
@@ -170,6 +236,8 @@ export class BrowserManager {
   constructor(
     private getWindow: () => BrowserWindow | null,
     private emit: { state(s: BrowserState): void; activity(sessionId: string): void; menu(m: BrowserMenu): void },
+    /** Who drives a session's browser (Claude, Codex…), for the cursor's tag. */
+    private who: (sessionId: string) => { name: string; color: string } = () => ({ name: "Agent", color: "#7c6cf0" }),
   ) {}
 
   private get(sessionId: string): SessionBrowser {
@@ -282,10 +350,22 @@ export class BrowserManager {
   agent(sessionId: string) {
     this.emit.activity(sessionId);
     const b = this.get(sessionId);
+    // Show the cursor move, then act once it arrives (only worth the wait while you can see the browser).
+    const show = async (x: number, y: number, action: AgentPointer["action"]) => {
+      await b.pointer({ x, y, action, ...this.who(sessionId) });
+      if (this.shown === sessionId) await new Promise((r) => setTimeout(r, action === "click" ? 380 : 200));
+    };
     return {
       navigate: (url: string) => b.navigate(url),
       back: () => b.view.webContents.navigationHistory.goBack(),
-      screenshot: () => b.screenshot(),
+      screenshot: async () => {
+        await b.pointerVisible(false);
+        try {
+          return await b.screenshot();
+        } finally {
+          await b.pointerVisible(true);
+        }
+      },
       readPage: () => b.eval<ReadPageResult>(READ_PAGE_JS),
       click: async (target: { ref?: number; x?: number; y?: number }) => {
         let pt = target.x != null && target.y != null ? { x: target.x, y: target.y } : null;
@@ -294,19 +374,23 @@ export class BrowserManager {
           if (!pt) throw new Error(`No element with ref ${target.ref}. Call read_page again — refs change after navigation.`);
         }
         if (!pt) throw new Error("Provide either ref or x and y.");
+        await show(pt.x, pt.y, "click");
         await b.click(pt.x, pt.y);
       },
       type: async (text: string, ref?: number) => {
         if (ref != null) {
           const pt = await b.eval<{ x: number; y: number } | null>(REF_CENTER_JS(ref));
           if (!pt) throw new Error(`No element with ref ${ref}.`);
+          await show(pt.x, pt.y, "click");
           await b.click(pt.x, pt.y);
         }
+        if (b.last) await b.pointer({ ...b.last, action: "type", ...this.who(sessionId) });
         await b.type(text);
       },
       press: (key: string) => b.press(key),
       scroll: async (dy: number) => {
         const [w, h] = await b.eval<[number, number]>("[innerWidth, innerHeight]");
+        await show(w / 2, h / 2, "scroll");
         await b.scroll(w / 2, h / 2, 0, dy);
       },
       evaluate: (js: string) => b.eval(js),
