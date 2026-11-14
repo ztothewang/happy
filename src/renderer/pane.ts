@@ -15,6 +15,8 @@ export type PaneTab =
 export interface PaneState {
   open: boolean;
   tabs: PaneTab[];
+  /** This chat's pane width (px), once you've dragged it; otherwise the default. */
+  width?: number;
   active?: string;
 }
 

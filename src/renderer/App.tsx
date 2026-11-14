@@ -114,7 +114,7 @@ function Shell() {
   /** Sessions with something new for you: finished, waiting on you, or failed. Cleared when you click the session. */
   const [unread, setUnread] = useState<Map<string, "done" | "blocked" | "failed">>(new Map());
   const [panes, setPanes] = useState<Record<string, PaneState>>(() => loadJson(PANE_KEY, {}));
-  const [paneWidth, setPaneWidth] = useState<number>(() => loadJson(PANE_WIDTH_KEY, 520));
+  const [paneWidth] = useState<number>(() => loadJson(PANE_WIDTH_KEY, 520));
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadJson(SIDEBAR_WIDTH_KEY, 340));
   const [browserStates, setBrowserStates] = useState<Record<string, BrowserState>>({});
   const [groups, setGroups] = useState<SessionGroup[]>([]);
@@ -129,7 +129,6 @@ function Shell() {
   const toast = useToast();
 
   useEffect(() => saveJson(PANE_KEY, panes), [panes]);
-  useEffect(() => saveJson(PANE_WIDTH_KEY, paneWidth), [paneWidth]);
   useEffect(() => saveJson(SIDEBAR_WIDTH_KEY, sidebarWidth), [sidebarWidth]);
 
   const updatePane = useCallback((sid: string, fn: (p: PaneState) => PaneState) => {
@@ -415,8 +414,14 @@ function Shell() {
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = paneWidth;
-    const move = (ev: MouseEvent) => setPaneWidth(Math.min(Math.max(300, startW + (startX - ev.clientX)), window.innerWidth - 560));
+    // Each chat keeps its own width; the shared one is only the default for chats you haven't sized.
+    const sid = current?.id;
+    if (!sid) return;
+    const startW = pane?.width ?? paneWidth;
+    const move = (ev: MouseEvent) => {
+      const width = Math.min(Math.max(300, startW + (startX - ev.clientX)), window.innerWidth - 560);
+      updatePane(sid, (p) => ({ ...p, width }));
+    };
     const up = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
@@ -518,7 +523,7 @@ function Shell() {
           {current && pane?.open && (
             <>
               <div className="resizer" onMouseDown={startResize} />
-              <div className="pane-wrap" style={{ width: paneWidth }}>
+              <div className="pane-wrap" style={{ width: pane.width ?? paneWidth }}>
                 <PreviewPane
                   key={current.id}
                   sessionId={current.id}
@@ -538,7 +543,7 @@ function Shell() {
                     })
                   }
                   onClosePane={() => updatePane(current.id, (p) => ({ ...p, open: false }))}
-                  onCloseAll={() => updatePane(current.id, () => ({ open: false, tabs: [] }))}
+                  onCloseAll={() => updatePane(current.id, (p) => ({ open: false, tabs: [], width: p.width }))}
                   checkouts={[
                     ...(current.worktree?.removed ? [] : [{ path: current.cwd, label: current.worktree?.branch ?? current.git?.branch ?? "this folder" }]),
                     ...(current.linkedWorktrees ?? []).filter((w) => !w.removed).map((w) => ({ path: w.path, label: w.branch ?? w.path.split("/").pop()! })),
