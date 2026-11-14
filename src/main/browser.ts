@@ -391,7 +391,12 @@ export class BrowserManager {
       scroll: async (dy: number) => {
         const [w, h] = await b.eval<[number, number]>("[innerWidth, innerHeight]");
         await show(w / 2, h / 2, "scroll");
-        await b.scroll(w / 2, h / 2, 0, dy);
+        // Glide in small steps (one big wheel event jumps, which looks bad on screen and in recordings).
+        const steps = Math.min(12, Math.max(1, Math.round(Math.abs(dy) / 60)));
+        for (let i = 0; i < steps; i++) {
+          await b.scroll(w / 2, h / 2, 0, dy / steps);
+          await new Promise((r) => setTimeout(r, 16));
+        }
       },
       evaluate: (js: string) => b.eval(js),
       console: () => b.console.slice(-50),

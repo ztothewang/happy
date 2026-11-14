@@ -2,7 +2,7 @@ import { app, powerSaveBlocker, BrowserWindow, dialog, ipcMain, Menu, net, Notif
 import { demo } from "./demo.js";
 import { runDemoShots } from "./demoShots.js";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserManager } from "./browser.js";
@@ -605,37 +605,49 @@ app.whenReady().then(async () => {
   });
   handle("browser:recordStop", (id: string) => void browsers.recording.delete(id));
   // Stopped recordings wait as drafts (temp folder) until you save or discard them in the editor.
+  // They arrive as WebM and are converted to MP4 right away with ffmpeg (H.264, plays everywhere).
   const draftDir = join(app.getPath("temp"), "happy-recordings");
   const isDraft = (p: string) => resolve(p).startsWith(draftDir + "/");
-  handle("browser:saveRecordingDraft", (data: ArrayBuffer, ext: string) => {
+  const ffmpeg = async (args: string[]) => {
+    const { default: bin } = await import("ffmpeg-static");
+    if (!bin) throw new Error("ffmpeg isn't available on this platform.");
+    const { execFile } = await import("node:child_process");
+    await new Promise<void>((ok, fail) =>
+      execFile(bin as unknown as string, ["-hide_banner", "-loglevel", "error", "-y", ...args], { timeout: 300_000, maxBuffer: 8 * 1024 * 1024 }, (err, _o, stderr) =>
+        err ? fail(new Error(stderr.trim().split("\n").pop() || err.message)) : ok(),
+      ),
+    );
+  };
+  // Constant 30fps (the page only sends frames when it repaints), even dimensions (H.264 needs them), widely playable pixel format, index up front for instant seeking.
+  const H264 = ["-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,fps=30", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an"];
+  handle("browser:saveRecordingDraft", async (data: ArrayBuffer) => {
     mkdirSync(draftDir, { recursive: true });
-    const path = join(draftDir, `${Date.now()}.${ext === "webm" ? "webm" : "mp4"}`);
-    writeFileSync(path, Buffer.from(data));
-    return path;
+    const base = join(draftDir, String(Date.now()));
+    writeFileSync(`${base}.webm`, Buffer.from(data));
+    try {
+      await ffmpeg(["-i", `${base}.webm`, ...H264, `${base}.mp4`]);
+    } finally {
+      rmSync(`${base}.webm`, { force: true });
+    }
+    return { path: `${base}.mp4`, mp4: readFileSync(`${base}.mp4`) };
   });
   handle("browser:discardRecording", (path: string) => {
     if (isDraft(path)) rmSync(path, { force: true });
   });
-  /** Save a draft to ~/Movies/Happy, cut to [start, start + duration] when given (macOS avconvert, no re-encode). */
+  /** Save a draft to ~/Movies/Happy, cut to [start, start + duration] when given (re-encoded, so the cut is frame-exact). */
   handle("browser:finishRecording", async (path: string, start?: number, duration?: number) => {
     if (!isDraft(path) || !existsSync(path)) throw new Error("That recording is gone.");
     const dir = join(app.getPath("videos"), "Happy");
     mkdirSync(dir, { recursive: true });
     const d = new Date();
     const p2 = (n: number) => String(n).padStart(2, "0");
-    const ext = path.endsWith(".webm") ? "webm" : "mp4";
-    let out = join(dir, `Browser recording ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} at ${p2(d.getHours())}.${p2(d.getMinutes())}.${p2(d.getSeconds())}.${ext}`);
+    const name = `Browser recording ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} at ${p2(d.getHours())}.${p2(d.getMinutes())}.${p2(d.getSeconds())}`;
+    let out = join(dir, `${name}.mp4`);
     if (start != null && duration != null) {
-      if (ext === "webm") throw new Error("Trimming needs an MP4 recording.");
-      out = out.replace(/\.mp4$/, " (trimmed).mp4");
-      const { execFile } = await import("node:child_process");
-      const args = ["--source", path, "--output", out, "--preset", "PresetPassthrough", "--start", start.toFixed(3), "--duration", duration.toFixed(3), "--replace"];
-      await new Promise<void>((ok, fail) => execFile("/usr/bin/avconvert", args, { timeout: 120_000 }, (err, _o, stderr) => (err ? fail(new Error(stderr.trim() || err.message)) : ok())));
-      rmSync(path, { force: true });
-    } else {
-      copyFileSync(path, out);
-      rmSync(path, { force: true });
-    }
+      out = join(dir, `${name} (trimmed).mp4`);
+      await ffmpeg(["-ss", start.toFixed(3), "-i", path, "-t", duration.toFixed(3), ...H264, out]);
+    } else copyFileSync(path, out);
+    rmSync(path, { force: true });
     return out;
   });  handle("browser:edit", (id: string, action: BrowserEdit, x?: number, y?: number) => browsers.edit(id, action, x, y));
 

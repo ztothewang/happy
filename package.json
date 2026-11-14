@@ -34,6 +34,7 @@
     "@openai/codex-sdk": "^0.164.0",
     "codemirror": "^6.0.2",
     "dompurify": "^3.4.17",
+    "ffmpeg-static": "^5.2.0",
     "highlight.js": "^11.12.0",
     "lucide-react": "^0.468.0",
     "marked": "^18.1.1",

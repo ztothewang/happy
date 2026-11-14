@@ -37,7 +37,8 @@ export async function startRecording(sessionId: string) {
   try {
     await hub().browserRecordStart(sessionId);
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30, width: { max: 1920 }, height: { max: 1920 } }, audio: false });
-    const type = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+    // WebM: Chromium's own MP4/H.264 recording comes out corrupt (only QuickTime tolerates it). Happy converts to MP4 with ffmpeg.
+    const type = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
     const r = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8_000_000 });
     const chunks: Blob[] = [];
     let byAgent = false;
@@ -48,8 +49,9 @@ export async function startRecording(sessionId: string) {
       changed();
       try {
         const blob = new Blob(chunks, { type: r.mimeType });
-        const path = await hub().saveRecordingDraft(await blob.arrayBuffer(), r.mimeType.includes("mp4") ? "mp4" : "webm");
-        drafts = [...drafts, { sessionId, path, url: URL.createObjectURL(blob), byAgent }];
+        const { path, mp4 } = await hub().saveRecordingDraft(await blob.arrayBuffer(), "webm");
+        // Play the converted MP4 from memory (seeks are instant and exact).
+        drafts = [...drafts, { sessionId, path, url: URL.createObjectURL(new Blob([mp4 as BlobPart], { type: "video/mp4" })), byAgent }];
         changed();
       } catch (e) {
         reportRecordingError(`Couldn't keep the recording: ${(e as Error).message}`);

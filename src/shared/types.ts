@@ -1191,8 +1191,8 @@ export interface HubApi {
   /** Next getDisplayMedia() call captures this session's browser page. */
   browserRecordStart(sessionId: string): Promise<void>;
   browserRecordStop(sessionId: string): Promise<void>;
-  /** Keep a stopped recording as a draft (temp file) for the editor; returns its path. */
-  saveRecordingDraft(data: ArrayBuffer, ext: "mp4" | "webm"): Promise<string>;
+  /** Keep a stopped recording (WebM) as a draft for the editor, converted to MP4; returns the MP4's path and bytes (for playback). */
+  saveRecordingDraft(data: ArrayBuffer, ext: "webm"): Promise<{ path: string; mp4: Uint8Array }>;
   /** Save a draft to ~/Movies/Happy, trimmed to [start, start + duration] when given; returns the saved path. */
   finishRecording(path: string, start?: number, duration?: number): Promise<string>;
   discardRecording(path: string): Promise<void>;
