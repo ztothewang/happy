@@ -16,7 +16,7 @@ const colName = (i: number) => {
 };
 
 /** Excel / CSV as a scrollable grid with sheet tabs (SheetJS, loaded on first use). */
-export function SheetView({ path }: { path: string }) {
+export function SheetView({ path, v }: { path: string; v?: number }) {
   const [sheets, setSheets] = useState<Sheet[] | null>(null);
   const [err, setErr] = useState<string>();
   const [tab, setTab] = useState(0);
@@ -28,7 +28,7 @@ export function SheetView({ path }: { path: string }) {
     setTab(0);
     void (async () => {
       const XLSX = await import("xlsx");
-      const res = await fetch(fileUrl(path));
+      const res = await fetch(fileUrl(path, v));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const csv = /\.(csv|tsv)$/i.test(path);
       const wb = csv
@@ -45,7 +45,7 @@ export function SheetView({ path }: { path: string }) {
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [path, v]);
 
   const sheet = sheets?.[tab];
   const cols = useMemo(() => Math.min(sheet?.totalCols ?? 0, MAX_COLS), [sheet]);

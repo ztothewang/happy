@@ -65,7 +65,9 @@ export const PaneContext = createContext<PaneApi>({ open: () => {}, openLink: ()
 export const usePane = () => useContext(PaneContext);
 
 /** Local files: the hubfile:// protocol on the desktop, the remote server's /hubfile/ route on the phone. */
-export const fileUrl = (path: string) => ((window as { hub?: { isRemote?: boolean } }).hub?.isRemote ? `/hubfile/${encodeURIComponent(path)}` : `hubfile://local/${encodeURIComponent(path)}`);
+/** A local file's URL; pass `v` (e.g. a reload count) to get a fresh copy instead of the cached one. */
+export const fileUrl = (path: string, v?: number) =>
+  ((window as { hub?: { isRemote?: boolean } }).hub?.isRemote ? `/hubfile/${encodeURIComponent(path)}` : `hubfile://local/${encodeURIComponent(path)}`) + (v ? `?v=${v}` : "");
 export const baseName = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i;

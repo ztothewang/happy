@@ -380,21 +380,21 @@ function FileView({ path, line, cwd, sessionId }: { path: string; line?: number;
     return (
       <div className="file">
         {header}
-        <iframe className="pdf html-frame" sandbox="allow-scripts" src={fileUrl(path)} title={path} />
+        <iframe className="pdf html-frame" sandbox="allow-scripts" src={fileUrl(path, reload)} title={path} />
       </div>
     );
   if (isSheet && (asTable || !isCsv || c.kind !== "text"))
     return (
       <div className="file">
         {header}
-        <SheetView path={path} />
+        <SheetView path={path} v={reload} />
       </div>
     );
   if (c.kind === "pdf")
     return (
       <div className="file">
         {header}
-        <iframe className="pdf" src={`${fileUrl(path)}#toolbar=0&navpanes=0&view=FitH`} title={path} />
+        <iframe className="pdf" src={`${fileUrl(path, reload)}#toolbar=0&navpanes=0&view=FitH`} title={path} />
       </div>
     );
   if (c.kind !== "text")
@@ -439,15 +439,16 @@ function FileView({ path, line, cwd, sessionId }: { path: string; line?: number;
 
 function ImageView({ path }: { path: string }) {
   const [fit, setFit] = useState(true);
+  const [v, setV] = useState(0);
   return (
     <div className="file">
-      <FileHeader path={path}>
+      <FileHeader path={path} onReload={() => setV((n) => n + 1)}>
         <button className="link-btn" onClick={() => setFit(!fit)}>
           {fit ? "actual size" : "fit"}
         </button>
       </FileHeader>
       <div className={`image-body ${fit ? "fit" : ""}`}>
-        <img src={fileUrl(path)} alt={path} />
+        <img src={fileUrl(path, v)} alt={path} />
       </div>
     </div>
   );
