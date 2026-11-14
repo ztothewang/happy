@@ -755,12 +755,13 @@ const fmtSize = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math
 /** Pinned replies for this chat: read them here, jump to one in the chat, or unpin. */
 function PinsView({ sessionId, items }: { sessionId: string; items: TranscriptItem[] }) {
   const pins = items.filter((i) => i.pinned);
-  if (!pins.length) return <div className="muted pad center small">Nothing pinned yet. Hover a reply and click “pin”.</div>;
+  if (!pins.length) return <div className="muted pad center small">Nothing pinned yet. Hover a message and click “pin”.</div>;
   return (
     <div className="pins">
       {pins.map((it) => (
         <div key={it.id} className="pin-card">
           <div className="pin-h">
+            {it.kind === "user" && <span className="pin-you">you</span>}
             <span className="muted mono small">{new Date(it.ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
             <button className="link-btn" onClick={() => document.querySelector(`[data-item="${CSS.escape(it.id)}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
               jump to
@@ -769,7 +770,7 @@ function PinsView({ sessionId, items }: { sessionId: string; items: TranscriptIt
               unpin
             </button>
           </div>
-          <Markdown text={it.simplified ?? it.text} />
+          {it.kind === "user" ? <div className="pre user-text">{it.text}</div> : <Markdown text={it.simplified ?? it.text} />}
         </div>
       ))}
     </div>

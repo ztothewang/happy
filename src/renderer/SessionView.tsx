@@ -289,6 +289,11 @@ const ItemLine = memo(function ItemLine({
             ))}
             <Thumbs images={it.images} />
             {it.text && <span className="pre user-text">{it.text}</span>}
+            {onPin && it.text && (
+              <button className={`pin-btn ${it.pinned ? "on" : ""}`} onClick={() => onPin(!it.pinned)} title={it.pinned ? "Unpin" : "Pin this message (see it in the Pinned pane)"}>
+                {it.pinned ? "pinned" : "pin"}
+              </button>
+            )}
             <LinkCards text={it.text} />
           </div>
         </div>
@@ -531,7 +536,7 @@ export function SessionView({
       <div className="log-wrap">
       <div className="chat-corner">
         {s.items.some((i) => i.pinned) && (
-          <button className="td-pill" onClick={() => pane.open({ kind: "pins" })} title="Pinned replies (opens in the side pane)">
+          <button className="td-pill" onClick={() => pane.open({ kind: "pins" })} title="Pinned messages (opens in the side pane)">
             <Pin size={12} /> {s.items.filter((i) => i.pinned).length}
           </button>
         )}
@@ -578,7 +583,7 @@ export function SessionView({
             who={who}
             showTools={showTools}
             onSimplify={b.kind === "item" && b.it.kind === "assistant" && (b.it.id === lastReplyId || !!b.it.simplified) ? () => hub().simplify(s.id, b.it.id) : undefined}
-            onPin={b.kind === "item" && b.it.kind === "assistant" ? (v) => void hub().pinItem(s.id, b.it.id, v) : undefined}
+            onPin={b.kind === "item" && (b.it.kind === "assistant" || b.it.kind === "user") ? (v) => void hub().pinItem(s.id, b.it.id, v) : undefined}
             onWtf={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, WTF_PROMPT) : undefined}
             onStatus={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, STATUS_PROMPT) : undefined}
           />

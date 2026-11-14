@@ -1997,3 +1997,5 @@ pre.code { position: relative; }
 .re-btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
 .re-btn.danger { background: none; color: var(--bad); border-color: var(--bad); }
 .re-btn:disabled { opacity: 0.5; cursor: default; }
+
+.pin-you { font: 600 11.5px var(--f); color: var(--fg); }
