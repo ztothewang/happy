@@ -132,13 +132,10 @@ class SessionBrowser {
 export interface AgentPointer {
   x: number;
   y: number;
-  /** Who's driving: shown on the cursor's tag. */
-  name: string;
-  color: string;
   action: "move" | "click" | "type" | "scroll";
 }
 
-/** Draws (or moves) the agent cursor. Lives in a shadow root on <html>, so page styles can't touch it and page text/refs ignore it. */
+/** Draws (or moves) the agent cursor (blue, so it's never mistaken for yours). Lives in a shadow root on <html>, so page styles can't touch it and page text/refs ignore it. */
 const AGENT_CURSOR_JS = String.raw`function (o) {
   const ID = 'happy-agent-cursor';
   let host = document.getElementById(ID);
@@ -151,16 +148,14 @@ const AGENT_CURSOR_JS = String.raw`function (o) {
     root.innerHTML = '<style>' +
       '.c{position:fixed;left:0;top:0;transition:transform .35s cubic-bezier(.3,.7,.3,1),opacity .4s;will-change:transform;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}' +
       '.c svg{display:block}' +
-      '.t{position:absolute;left:15px;top:17px;font:600 11px/1 -apple-system,BlinkMacSystemFont,sans-serif;color:#fff;padding:4px 7px;border-radius:9px;white-space:nowrap}' +
       '.r{position:fixed;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;border:2px solid;animation:r .55s ease-out forwards}' +
       '@keyframes r{from{transform:scale(.3);opacity:1}to{transform:scale(1.6);opacity:0}}' +
-      '</style><div class="c"><svg width="20" height="22" viewBox="0 0 20 22"><path d="M2 1.5v17l4.6-4.3 3 6.6 3-1.4-3-6.4h6.2z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="t"></span></div>';
+      '</style><div class="c"><svg width="20" height="22" viewBox="0 0 20 22"><path d="M2 1.5v17l4.6-4.3 3 6.6 3-1.4-3-6.4h6.2z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></div>';
     document.documentElement.appendChild(host);
   }
-  const root = host.shadowRoot, c = root.querySelector('.c'), path = root.querySelector('path'), tag = root.querySelector('.t');
-  path.setAttribute('fill', o.color);
-  tag.style.background = o.color;
-  tag.textContent = o.action === 'type' ? o.name + ' · typing' : o.action === 'scroll' ? o.name + ' · scrolling' : o.name;
+  const COLOR = '#2f7cf6';
+  const root = host.shadowRoot, c = root.querySelector('.c');
+  root.querySelector('path').setAttribute('fill', COLOR);
   host.style.visibility = 'visible';
   if (!c.dataset.on) {
     c.style.transition = 'none';
@@ -174,7 +169,7 @@ const AGENT_CURSOR_JS = String.raw`function (o) {
   if (o.action === 'click') setTimeout(() => {
     const r = document.createElement('div');
     r.className = 'r';
-    r.style.left = o.x + 'px'; r.style.top = o.y + 'px'; r.style.borderColor = o.color;
+    r.style.left = o.x + 'px'; r.style.top = o.y + 'px'; r.style.borderColor = COLOR;
     root.appendChild(r);
     setTimeout(() => r.remove(), 700);
   }, 330);
@@ -236,8 +231,6 @@ export class BrowserManager {
   constructor(
     private getWindow: () => BrowserWindow | null,
     private emit: { state(s: BrowserState): void; activity(sessionId: string): void; menu(m: BrowserMenu): void },
-    /** Who drives a session's browser (Claude, Codex…), for the cursor's tag. */
-    private who: (sessionId: string) => { name: string; color: string } = () => ({ name: "Agent", color: "#7c6cf0" }),
   ) {}
 
   private get(sessionId: string): SessionBrowser {
@@ -352,7 +345,7 @@ export class BrowserManager {
     const b = this.get(sessionId);
     // Show the cursor move, then act once it arrives (only worth the wait while you can see the browser).
     const show = async (x: number, y: number, action: AgentPointer["action"]) => {
-      await b.pointer({ x, y, action, ...this.who(sessionId) });
+      await b.pointer({ x, y, action });
       if (this.shown === sessionId) await new Promise((r) => setTimeout(r, action === "click" ? 380 : 200));
     };
     return {
@@ -384,7 +377,6 @@ export class BrowserManager {
           await show(pt.x, pt.y, "click");
           await b.click(pt.x, pt.y);
         }
-        if (b.last) await b.pointer({ ...b.last, action: "type", ...this.who(sessionId) });
         await b.type(text);
       },
       press: (key: string) => b.press(key),

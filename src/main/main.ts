@@ -178,12 +178,6 @@ app.whenReady().then(async () => {
     state: (s: BrowserState) => send("browser:state", s),
     activity: (id: string) => send("browser:activity", id),
     menu: (m: BrowserMenu) => send("browser:menu", m),
-  }, (id) => {
-    let engine: string | undefined;
-    try {
-      engine = hub?.get(id).meta.engine;
-    } catch {}
-    return engine === "codex" ? { name: "Codex", color: "#1f8a5b" } : engine === "cursor" ? { name: "Cursor", color: "#4b5563" } : { name: "Claude", color: "#6d5ce8" };
   });
   browserHttp = new BrowserMcpHttp(browsers);
   await browserHttp.start();
