@@ -24,6 +24,8 @@ import { TasksView } from "./TasksView";
 import { Palette, type PaletteItem } from "./Palette";
 import { PaneContext, fileUrl, isImagePath, resolvePath, toTab, type PaneApi, type PaneState, type TabInput } from "./pane";
 import { PreviewPane } from "./PreviewPane";
+import { RecordingEditor } from "./RecordingEditor";
+import { setRecordingErrorHandler, startRecording, stopRecording, useRecordings } from "./recorder";
 import { SessionView, readShowSys, readShowTools, writeShowSys, writeShowTools } from "./SessionView";
 import { Sidebar, setTagDefs } from "./Sidebar";
 import { StatusBar } from "./StatusBar";
@@ -127,6 +129,8 @@ function Shell() {
   selectedRef.current = selected;
   const prevStatus = useRef<Record<string, string>>({});
   const toast = useToast();
+  useEffect(() => void setRecordingErrorHandler((m) => toast(m)), [toast]);
+  const recordings = useRecordings();
 
   useEffect(() => saveJson(PANE_KEY, panes), [panes]);
   useEffect(() => saveJson(SIDEBAR_WIDTH_KEY, sidebarWidth), [sidebarWidth]);
@@ -192,6 +196,8 @@ function Shell() {
         setSelected((cur) => (cur === id ? NEW : cur));
       }),
       hub().onBrowserState((b) => setBrowserStates((m) => ({ ...m, [b.sessionId]: b }))),
+      // The agent starts/stops recording its browser (record_start / record_stop).
+      hub().onBrowserRecord(({ sessionId, on }) => (on ? void startRecording(sessionId) : stopRecording(sessionId, true))),
       // When an agent starts using its browser, surface the browser tab (without stealing focus from an open file).
       hub().onBrowserActivity((sid) =>
         setPanes((all) => {
@@ -556,6 +562,7 @@ function Shell() {
         <StatusBar sessions={ordered} usage={usage} onFilter={setFilter} onNew={() => setSelected(NEW)} onPalette={() => setPalette(true)} />
       </div>
       {palette && <Palette items={paletteItems} onClose={() => setPalette(false)} />}
+      {recordings.drafts[0] && <RecordingEditor key={recordings.drafts[0].path} draft={recordings.drafts[0]} title={sessions[recordings.drafts[0].sessionId]?.title} />}
     </PaneContext.Provider>
   );
 }

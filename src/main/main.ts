@@ -2,8 +2,8 @@ import { app, powerSaveBlocker, BrowserWindow, dialog, ipcMain, Menu, net, Notif
 import { demo } from "./demo.js";
 import { runDemoShots } from "./demoShots.js";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserManager } from "./browser.js";
 import { BrowserMcpHttp } from "./browserTools.js";
@@ -179,6 +179,7 @@ app.whenReady().then(async () => {
     state: (s: BrowserState) => send("browser:state", s),
     activity: (id: string) => send("browser:activity", id),
     menu: (m: BrowserMenu) => send("browser:menu", m),
+    record: (sessionId: string, on: boolean) => send("browser:record", { sessionId, on }),
   });
   browserHttp = new BrowserMcpHttp(browsers);
   await browserHttp.start();
@@ -603,14 +604,40 @@ app.whenReady().then(async () => {
     browsers.recording.add(id);
   });
   handle("browser:recordStop", (id: string) => void browsers.recording.delete(id));
-  handle("browser:saveRecording", (name: string, data: ArrayBuffer) => {
-    const dir = join(app.getPath("videos"), "Happy");
-    mkdirSync(dir, { recursive: true });
-    const path = join(dir, name.replace(/[/\\:]/g, "-"));
+  // Stopped recordings wait as drafts (temp folder) until you save or discard them in the editor.
+  const draftDir = join(app.getPath("temp"), "happy-recordings");
+  const isDraft = (p: string) => resolve(p).startsWith(draftDir + "/");
+  handle("browser:saveRecordingDraft", (data: ArrayBuffer, ext: string) => {
+    mkdirSync(draftDir, { recursive: true });
+    const path = join(draftDir, `${Date.now()}.${ext === "webm" ? "webm" : "mp4"}`);
     writeFileSync(path, Buffer.from(data));
     return path;
   });
-  handle("browser:edit", (id: string, action: BrowserEdit, x?: number, y?: number) => browsers.edit(id, action, x, y));
+  handle("browser:discardRecording", (path: string) => {
+    if (isDraft(path)) rmSync(path, { force: true });
+  });
+  /** Save a draft to ~/Movies/Happy, cut to [start, start + duration] when given (macOS avconvert, no re-encode). */
+  handle("browser:finishRecording", async (path: string, start?: number, duration?: number) => {
+    if (!isDraft(path) || !existsSync(path)) throw new Error("That recording is gone.");
+    const dir = join(app.getPath("videos"), "Happy");
+    mkdirSync(dir, { recursive: true });
+    const d = new Date();
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    const ext = path.endsWith(".webm") ? "webm" : "mp4";
+    let out = join(dir, `Browser recording ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} at ${p2(d.getHours())}.${p2(d.getMinutes())}.${p2(d.getSeconds())}.${ext}`);
+    if (start != null && duration != null) {
+      if (ext === "webm") throw new Error("Trimming needs an MP4 recording.");
+      out = out.replace(/\.mp4$/, " (trimmed).mp4");
+      const { execFile } = await import("node:child_process");
+      const args = ["--source", path, "--output", out, "--preset", "PresetPassthrough", "--start", start.toFixed(3), "--duration", duration.toFixed(3), "--replace"];
+      await new Promise<void>((ok, fail) => execFile("/usr/bin/avconvert", args, { timeout: 120_000 }, (err, _o, stderr) => (err ? fail(new Error(stderr.trim() || err.message)) : ok())));
+      rmSync(path, { force: true });
+    } else {
+      copyFileSync(path, out);
+      rmSync(path, { force: true });
+    }
+    return out;
+  });  handle("browser:edit", (id: string, action: BrowserEdit, x?: number, y?: number) => browsers.edit(id, action, x, y));
 
   createWindow();
   app.on("activate", () => {

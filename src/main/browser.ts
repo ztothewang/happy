@@ -230,7 +230,7 @@ export class BrowserManager {
 
   constructor(
     private getWindow: () => BrowserWindow | null,
-    private emit: { state(s: BrowserState): void; activity(sessionId: string): void; menu(m: BrowserMenu): void },
+    private emit: { state(s: BrowserState): void; activity(sessionId: string): void; menu(m: BrowserMenu): void; record(sessionId: string, on: boolean): void },
   ) {}
 
   private get(sessionId: string): SessionBrowser {
@@ -401,6 +401,16 @@ export class BrowserManager {
         while (wc.isLoading() && Date.now() - start < timeoutMs) await new Promise((r) => setTimeout(r, 100));
       },
       state: () => b.state(),
+      /** Ask Happy's window to start/stop recording this browser; resolves once it has. */
+      record: async (on: boolean) => {
+        if (on && !b.view.webContents.getURL()) throw new Error("Open a page first, then start recording.");
+        if (this.recording.has(sessionId) === on) return;
+        this.emit.record(sessionId, on);
+        for (let i = 0; i < 100 && this.recording.has(sessionId) !== on; i++) await new Promise((r) => setTimeout(r, 100));
+        if (this.recording.has(sessionId) !== on) throw new Error(on ? "Recording didn't start (is Happy's window open?)." : "Recording didn't stop in time.");
+      },
+      recording: () => this.recording.has(sessionId),
+      shown: () => this.shown === sessionId,
     };
   }
 

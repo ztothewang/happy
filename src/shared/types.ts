@@ -1191,8 +1191,13 @@ export interface HubApi {
   /** Next getDisplayMedia() call captures this session's browser page. */
   browserRecordStart(sessionId: string): Promise<void>;
   browserRecordStop(sessionId: string): Promise<void>;
-  /** Write a finished recording to ~/Movies/Happy; returns its path. */
-  saveRecording(name: string, data: ArrayBuffer): Promise<string>;
+  /** Keep a stopped recording as a draft (temp file) for the editor; returns its path. */
+  saveRecordingDraft(data: ArrayBuffer, ext: "mp4" | "webm"): Promise<string>;
+  /** Save a draft to ~/Movies/Happy, trimmed to [start, start + duration] when given; returns the saved path. */
+  finishRecording(path: string, start?: number, duration?: number): Promise<string>;
+  discardRecording(path: string): Promise<void>;
+  /** The agent asked to start or stop recording its browser. */
+  onBrowserRecord(cb: (r: { sessionId: string; on: boolean }) => void): () => void;
   browserEdit(sessionId: string, action: BrowserEdit, x?: number, y?: number): Promise<void>;
   onBrowserActivity(cb: (sessionId: string) => void): () => void;
   simplify(sessionId: string, itemId: string): Promise<void>;

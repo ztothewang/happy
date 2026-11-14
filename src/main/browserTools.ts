@@ -140,6 +140,30 @@ export const BROWSER_TOOLS: BrowserTool[] = [
       return text(JSON.stringify(v, null, 2)?.slice(0, 20000) ?? "undefined");
     },
   }),
+  defineTool({
+    name: "record_start",
+    description:
+      "Start recording this browser to a video, e.g. when the user asks you to record a demo. Open the right page first, then call this, do the demo at a natural pace, and call record_stop. The video shows the page with your cursor and clicks.",
+    shape: {},
+    readOnly: true,
+    async run(ops) {
+      await ops.record(true);
+      return text(
+        `Recording. ${where(ops)}${ops.shown() ? "" : "\nNote: the user isn't looking at this chat's browser right now, so the video may freeze until they open it."}`,
+      );
+    },
+  }),
+  defineTool({
+    name: "record_stop",
+    description: "Stop the recording started with record_start. Happy then opens the video for the user to trim and save (you don't need to save it).",
+    shape: {},
+    readOnly: true,
+    async run(ops) {
+      if (!ops.recording()) return text("Not recording.");
+      await ops.record(false);
+      return text("Stopped. The user now has the video open in Happy to trim and save.");
+    },
+  }),
 ];
 
 const READ_ONLY = new Set(BROWSER_TOOLS.filter((t) => t.readOnly).map((t) => t.name));

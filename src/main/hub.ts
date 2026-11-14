@@ -193,9 +193,10 @@ Be brief: lead with the answer, then the evidence (counts, times, the exact erro
 const BROWSER_PROMPT = `
 # Happy browser
 You have a real browser shown live to the user in Happy's side pane, via the mcp__browser__* tools
-(navigate, read_page, screenshot, click, type, press_key, scroll, evaluate, console_logs, back).
+(navigate, read_page, screenshot, click, type, press_key, scroll, evaluate, console_logs, back, record_start, record_stop).
 Use it whenever a task involves a web page the user would want to see: testing a local dev server, checking a deployed app,
 reading docs, or reproducing a UI bug. Prefer read_page (text + element refs) for navigating and screenshot for visual checks.
+When asked to record a demo: open the starting page, record_start, walk through it at a natural pace, then record_stop (the user trims and saves it).
 When you change a file or produce an image the user should look at, mention its absolute path — the user can click it to preview.
 `;
 
