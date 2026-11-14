@@ -36,7 +36,7 @@ export async function startRecording(sessionId: string) {
   if (active.has(sessionId)) return;
   try {
     await hub().browserRecordStart(sessionId);
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30, width: { max: 1920 }, height: { max: 1920 } }, audio: false });
     const type = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
     const r = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8_000_000 });
     const chunks: Blob[] = [];

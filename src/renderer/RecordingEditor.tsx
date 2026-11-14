@@ -56,6 +56,25 @@ export function RecordingEditor({ draft, title }: { draft: RecordingDraft; title
     }
   };
 
+  // Move the playhead every frame while playing (timeupdate only fires a few times a second).
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    const step = () => {
+      const v = video.current;
+      if (v) {
+        setT(v.currentTime);
+        if (dur && v.currentTime >= range[1] - 0.02) {
+          v.pause();
+          v.currentTime = range[1];
+        }
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, dur, range]);
+
   const toggle = () => {
     const v = video.current!;
     if (v.paused) {
@@ -67,7 +86,10 @@ export function RecordingEditor({ draft, title }: { draft: RecordingDraft; title
   const seek = (x: number) => {
     const r = track.current!.getBoundingClientRect();
     const at = Math.min(Math.max(0, (x - r.left) / r.width), 1) * dur;
-    video.current!.currentTime = at;
+    const v = video.current!;
+    v.pause();
+    v.currentTime = at; // shows that exact frame
+    setT(at);
     return at;
   };
 
@@ -130,13 +152,13 @@ export function RecordingEditor({ draft, title }: { draft: RecordingDraft; title
             <div className="rec-ed-sub">{draft.byAgent ? "Recorded by the agent" : "Browser recording"}</div>
           </div>
           <button className="re-icon" onClick={discard} title="Discard">
-            <X size={16} />
+            <X size={15} />
           </button>
         </div>
         <video ref={video} className="rec-ed-video" src={draft.url} onLoadedMetadata={onMeta} onTimeUpdate={onTime} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onClick={toggle} />
         <div className="rec-ed-bar">
           <button className="re-play" onClick={toggle} title="Play / pause (space)" disabled={!dur}>
-            {playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
+            {playing ? <Pause size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
           </button>
           <div className="rec-ed-track" ref={track} onPointerDown={drag("head")}>
             <div className="rec-ed-cut" style={{ left: 0, width: pct(range[0]) }} />
