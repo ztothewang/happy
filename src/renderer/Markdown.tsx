@@ -55,7 +55,10 @@ function keepPlaceholders(text: string): string {
   if (!text.includes("<")) return text;
   return text
     .split(/(```[\s\S]*?```|`[^`\n]*`)/g)
-    .map((part, i) => (i % 2 ? part : part.replace(/<(\/?)([a-zA-Z][\w-]*)([^<>]*)>/g, (m, _slash, name: string) => (HTML_TAGS.has(name.toLowerCase()) ? m : m.replace(/</g, "&lt;").replace(/>/g, "&gt;")))))
+    .map((part, i) => (i % 2 ? part : part.replace(/<(\/?)([a-zA-Z][\w-]*)([^<>]*)>/g, (m, _slash, name: string, _rest, at: number) =>
+            // `](</path with spaces.md>)` is a link destination, not a tag.
+            HTML_TAGS.has(name.toLowerCase()) || part.slice(Math.max(0, at - 2), at) === "](" ? m : m.replace(/</g, "&lt;").replace(/>/g, "&gt;"),
+          )))
     .join("");
 }
 
