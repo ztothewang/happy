@@ -99,7 +99,9 @@ export function resolvePath(raw: string, cwd: string): { path: string; line?: nu
 
 /** Does a string look like a file path worth linking (abs path, or relative with an extension)? */
 export function looksLikePath(s: string): boolean {
-  if (s.length > 300 || /\s/.test(s)) return false;
+  if (s.length > 300 || /[\n\t]/.test(s)) return false;
+  // Absolute or home paths may contain spaces ("~/Downloads/Demo Speaker Notes.txt") when they end in a file extension or a slash.
+  if (/ /.test(s)) return /^(\/|~\/)[^ ]/.test(s) && /(\.[a-z0-9]{1,8}|\/)$/i.test(s) && !/ {2}|^\/\/|[<>|;`$]/.test(s);
   // Path segments may include Next.js route chars: (group), [param], [...slug].
   if (/^(\/|~\/|\.\.?\/)[\w.@+()[\]-]/.test(s)) return true;
   if (/^[\w.@+()[\]-]+(\/[\w.@+()[\]-]+)*\/$/.test(s)) return true; // folder like frontend/ or backend/app/
