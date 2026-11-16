@@ -1999,3 +1999,10 @@ pre.code { position: relative; }
 .re-btn:disabled { opacity: 0.5; cursor: default; }
 
 .pin-you { font: 600 11.5px var(--f); color: var(--fg); }
+
+/* A reply's turn stats (right-click a reply). */
+.turn-stats .body { padding-top: 2px; }
+.ts-chip { display: inline-flex; align-items: center; gap: 8px; font: 500 11.5px var(--f); font-variant-numeric: tabular-nums; color: var(--fg); background: var(--raise); border: 1px solid var(--div); border-radius: 999px; padding: 2px 4px 2px 10px; }
+.ts-model { color: var(--dim); font-weight: 400; }
+.ts-x { border: 0; background: none; color: var(--dim); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 4px; border-radius: 999px; }
+.ts-x:hover { color: var(--fg); }

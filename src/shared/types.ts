@@ -889,7 +889,19 @@ export interface TranscriptItem {
   /** Tool wall time and a one-line result ("7 hits", "exit 0"). */
   durationMs?: number;
   result?: string;
+  /** kind=assistant, the turn's last reply: what the turn took (right-click a reply to show it). */
+  stats?: TurnStats;
   ts: number;
+}
+
+export interface TurnStats {
+  /** Wall time from the turn starting to it ending. */
+  ms: number;
+  tools: number;
+  /** Tokens processed in the turn (input + cache writes + output, excluding cache reads). */
+  tokens: number;
+  costUsd: number;
+  model?: string;
 }
 
 export interface PermissionRequest {

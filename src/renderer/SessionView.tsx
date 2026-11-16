@@ -8,12 +8,14 @@ import { Composer, type SlashCommand } from "./Composer";
 import { Markdown } from "./Markdown";
 import { ProcessStrip } from "./Processes";
 import { PlanCard, QuestionCard, isPromptTool } from "./PromptCards";
-import { CLAUDE_MODELS, PERMISSION_MODES, engineCode, fmtClock, fmtDuration } from "./models";
+import { CLAUDE_MODELS, PERMISSION_MODES, engineCode, fmtClock, fmtCost, fmtDuration, fmtTokens } from "./models";
 import { baseName, fileUrl, isImagePath, usePane } from "./pane";
 import { useToast } from "./toast";
 import { NextSteps } from "./NextSteps";
 import { LinkCards, openLightbox } from "./Lightbox";
 import { stageLabel, workHeads } from "./Sidebar";
+import { useMenu } from "./Menu";
+import { showChatStats, showItemStats, turnStatsFor, useShownStats } from "./turnStats";
 
 /** mcp__browser__navigate → browser.navigate */
 const toolLabel = (t?: string) => {
@@ -166,12 +168,33 @@ function ToolBlock({ items, cwd, showAll }: { items: TranscriptItem[]; cwd: stri
   );
 }
 
-function Line({ b, cwd, who, showTools, onSimplify, onPin, onWtf, onStatus }: { b: Block; cwd: string; who: string; showTools: boolean; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void }) {
+function Line({ b, cwd, who, showTools, onSimplify, onPin, onWtf, onStatus, onContextMenu }: { b: Block; cwd: string; who: string; showTools: boolean; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void; onContextMenu?(e: React.MouseEvent): void }) {
   const pane = usePane();
   if (b.kind === "tools") return <ToolBlock items={b.items} cwd={cwd} showAll={showTools} />;
   return (
-    <div data-item={b.it.id} className={b.it.pinned ? "pinned-item" : undefined}>
+    <div data-item={b.it.id} className={b.it.pinned ? "pinned-item" : undefined} onContextMenu={onContextMenu}>
       <ItemLine it={b.it} who={who} openFile={(f) => pane.open({ kind: "file", path: f })} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} />
+    </div>
+  );
+}
+
+/** A reply's turn: how long it ran, tool calls, tokens and cost. */
+function TurnStatsLine({ items, index, onClose }: { items: TranscriptItem[]; index: number; onClose(): void }) {
+  const st = turnStatsFor(items, index);
+  if (!st) return null;
+  const parts = [fmtDuration(st.ms) || "0s", `${st.tools} tool call${st.tools === 1 ? "" : "s"}`];
+  if (!st.estimated) parts.push(`${fmtTokens(st.tokens)} tokens`, fmtCost(st.costUsd) || "$0");
+  return (
+    <div className="ln turn-stats">
+      <span className="ts" />
+      <span className="who" />
+      <div className="body">
+        <span className="ts-chip" title={st.estimated ? "From before Happy recorded per-reply stats: time and tool calls only" : "This turn, from your message to the end of the reply"}>
+          {parts.join(" · ")}
+          {st.model && <span className="ts-model">{st.model}</span>}
+          <button className="ts-x" onClick={onClose} title="Hide stats">×</button>
+        </span>
+      </div>
     </div>
   );
 }
@@ -407,6 +430,23 @@ export function SessionView({
   const [showSys, setShowSys] = useState(readShowSys);
   // System notes (worktree created, interrupted, compacted…) are hidden unless turned on; errors always show.
   const blocks = useMemo(() => toBlocks(showSys ? s.items : s.items.filter((i) => i.kind !== "system")), [s.items, showSys]);
+  const itemIndex = useMemo(() => new Map(s.items.map((i, n) => [i.id, n])), [s.items]);
+  const shownStats = useShownStats();
+  const statsForChat = shownStats.chats.includes(s.id);
+  // Each turn's last reply (where "every reply" stats go).
+  const turnEnds = useMemo(() => {
+    const ends = new Set<string>();
+    let last: string | undefined;
+    for (const i of s.items) {
+      if (i.kind === "user") {
+        if (last) ends.add(last);
+        last = undefined;
+      } else if (i.kind === "assistant") last = i.id;
+    }
+    if (last && s.status !== "running") ends.add(last);
+    return ends;
+  }, [s.items, s.status]);
+  const menu = useMenu();
   useEffect(() => {
     const on = () => {
       setShowTools(readShowTools());
@@ -586,7 +626,22 @@ export function SessionView({
             onPin={b.kind === "item" && (b.it.kind === "assistant" || b.it.kind === "user") ? (v) => void hub().pinItem(s.id, b.it.id, v) : undefined}
             onWtf={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, WTF_PROMPT) : undefined}
             onStatus={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, STATUS_PROMPT) : undefined}
+            onContextMenu={
+              b.kind === "item" && b.it.kind === "assistant"
+                ? (e) => {
+                    if (e.defaultPrevented || window.getSelection()?.toString()) return;
+                    const on = shownStats.items.includes(b.it.id);
+                    menu.atMouse(e, [
+                      { label: on ? "Hide stats" : "Show stats", hint: "time, tools, tokens, cost", onSelect: () => showItemStats(b.it.id, !on) },
+                      { label: "Show stats on every reply in this chat", checked: statsForChat, onSelect: () => showChatStats(s.id, !statsForChat) },
+                    ]);
+                  }
+                : undefined
+            }
           />
+          {b.kind === "item" && b.it.kind === "assistant" && (shownStats.items.includes(b.it.id) || (statsForChat && turnEnds.has(b.it.id))) && (
+            <TurnStatsLine items={s.items} index={itemIndex.get(b.it.id) ?? -1} onClose={() => (shownStats.items.includes(b.it.id) ? showItemStats(b.it.id, false) : showChatStats(s.id, false))} />
+          )}
           {b.kind === "item" && b.it.id === lastMsgId && b.it.kind !== "assistant" && (
             <div className="ln macros">
               <span className="ts" />

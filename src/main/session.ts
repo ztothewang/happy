@@ -88,6 +88,8 @@ export abstract class Session {
   tokens?: number;
   activeMs = 0;
   turnStartedAt?: number;
+  /** Totals when the current turn started, to work out what the turn itself took. */
+  private turnBase?: { at: number; tokens: number; costUsd: number };
   /** Live background tasks (Claude) — merged with OS processes by the hub. */
   tasks = new Map<string, { id: string; label: string; kind?: string; status?: string; startedAt: number }>();
   osProcesses: import("../shared/types.js").SessionProcess[] = [];
@@ -348,10 +350,11 @@ export abstract class Session {
     if (this.status === status) return;
     this.status = status;
     // Active time: a turn runs from first "running" until idle/error (permission waits included).
-    if (status === "running") this.turnStartedAt ??= Date.now();
+    if (status === "running") this.startTurn();
     else if ((status === "idle" || status === "error") && this.turnStartedAt) {
       this.activeMs += Date.now() - this.turnStartedAt;
       this.turnStartedAt = undefined;
+      this.endTurnStats();
     }
     if (status === "idle" && this.queued.length && !this.holdFlush) setTimeout(() => this.flushQueued(), 0);
     if (status !== "running") {
@@ -360,6 +363,29 @@ export abstract class Session {
       waiters.forEach((w) => w());
     }
     this.touch();
+  }
+
+  private startTurn() {
+    if (this.turnStartedAt) return;
+    this.turnStartedAt = Date.now();
+    this.turnBase = { at: this.turnStartedAt, tokens: this.tokens ?? 0, costUsd: this.costUsd ?? 0 };
+  }
+
+  /** The turn's time, tool calls, tokens and cost go on its last reply. */
+  private endTurnStats() {
+    const b = this.turnBase;
+    this.turnBase = undefined;
+    if (!b) return;
+    const turn = this.items.filter((i) => i.ts >= b.at);
+    const reply = [...turn].reverse().find((i) => i.kind === "assistant");
+    if (!reply) return;
+    reply.stats = {
+      ms: Date.now() - b.at,
+      tools: turn.filter((i) => i.kind === "tool").length,
+      tokens: Math.max(0, (this.tokens ?? 0) - b.tokens),
+      costUsd: Math.max(0, (this.costUsd ?? 0) - b.costUsd),
+      model: this.meta.model,
+    };
   }
 
   /** Resolves once the session is no longer running (idle, error, or waiting on a permission). */
@@ -402,7 +428,7 @@ export abstract class Session {
     // Back to normal status handling (an idle end flushes queued messages and wakes waiters).
     if (status === "running") {
       this.status = "running";
-      this.turnStartedAt ??= Date.now();
+      this.startTurn();
       this.touch();
     } else {
       this.status = "running";
