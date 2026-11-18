@@ -22,6 +22,7 @@ export function RecordingEditor({ draft, title }: { draft: RecordingDraft; title
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [name, setName] = useState("");
 
   // The native browser view would cover this dialog: have it show a picture of itself meanwhile.
   useEffect(() => {
@@ -115,9 +116,9 @@ export function RecordingEditor({ draft, title }: { draft: RecordingDraft; title
   const save = async () => {
     setBusy(true);
     try {
-      const path = await hub().finishRecording(draft.path, trimmed ? range[0] : undefined, trimmed ? range[1] - range[0] : undefined);
+      const path = await hub().finishRecording(draft.path, trimmed ? range[0] : undefined, trimmed ? range[1] - range[0] : undefined, name.trim() || undefined);
       dropDraft(draft.path);
-      toast("Recording saved to Movies › Happy", { label: "Show in Finder", run: () => void hub().revealFile(path) });
+      toast(`Saved “${path.split("/").pop()}” to Movies › Happy`, { label: "Show in Finder", run: () => void hub().revealFile(path) });
     } catch (e) {
       toast(`Couldn't save: ${(e as Error).message}`);
       setBusy(false);
@@ -147,9 +148,23 @@ export function RecordingEditor({ draft, title }: { draft: RecordingDraft; title
     <div className="peek-backdrop rec-ed-back">
       <div className="rec-ed">
         <div className="rec-ed-head">
-          <div>
-            <div className="rec-ed-title">{title ?? "Recording"}</div>
-            <div className="rec-ed-sub">{draft.byAgent ? "Recorded by the agent" : "Browser recording"}</div>
+          <div className="rec-ed-names">
+            <input
+              className="rec-ed-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !busy && dur) void save();
+                if (e.key === "Escape") (e.target as HTMLInputElement).blur();
+              }}
+              placeholder="Name this video"
+              spellCheck={false}
+              autoFocus
+            />
+            <div className="rec-ed-sub">
+              {draft.byAgent ? "Recorded by the agent" : "Browser recording"}
+              {title ? ` · ${title}` : ""}
+            </div>
           </div>
           <button className="re-icon" onClick={discard} title="Discard">
             <X size={15} />

@@ -976,6 +976,8 @@ export interface GitChange {
   status: "M" | "A" | "D" | "R" | "?";
   add: number;
   del: number;
+  /** Asked for a chat: false = in a checkout it shares (main) but another chat's or yours, not this chat's. */
+  mine?: boolean;
 }
 
 export interface LimitWindow {
@@ -1182,7 +1184,8 @@ export interface HubApi {
   /** Save an edited file; only inside that chat's folders. */
   writeFile(sessionId: string, path: string, text: string): Promise<void>;
   gitDiff(cwd: string, path: string): Promise<string>;
-  gitChanges(cwd: string): Promise<GitChange[]>;
+  /** With a chat id, each change says whether it's that chat's (see GitChange.mine). */
+  gitChanges(cwd: string, sessionId?: string): Promise<GitChange[]>;
   usageToday(): Promise<UsageTotals>;
   limits(): Promise<EngineLimits>;
   onLimits(cb: (l: EngineLimits) => void): () => void;
@@ -1208,7 +1211,8 @@ export interface HubApi {
   /** Keep a stopped recording (WebM) as a draft for the editor, converted to MP4; returns the MP4's path and bytes (for playback). */
   saveRecordingDraft(data: ArrayBuffer, ext: "webm"): Promise<{ path: string; mp4: Uint8Array }>;
   /** Save a draft to ~/Movies/Happy, trimmed to [start, start + duration] when given; returns the saved path. */
-  finishRecording(path: string, start?: number, duration?: number): Promise<string>;
+  /** Saves to ~/Movies/Happy as "<title>.mp4" (or a dated name); returns the path. */
+  finishRecording(path: string, start?: number, duration?: number, title?: string): Promise<string>;
   discardRecording(path: string): Promise<void>;
   /** The agent asked to start or stop recording its browser. */
   onBrowserRecord(cb: (r: { sessionId: string; on: boolean }) => void): () => void;

@@ -271,7 +271,8 @@ export class GitWatch {
     }
   }
 
-  async check(cwd: string, prev?: GitInfo, baselineDirty?: string[], baseSha?: string): Promise<GitInfo | undefined> {
+  /** `owns`: for a checkout shared with other chats, whether a changed path (relative to the repo root) is this chat's. */
+  async check(cwd: string, prev?: GitInfo, baselineDirty?: string[], baseSha?: string, owns?: (rel: string, root: string) => boolean): Promise<GitInfo | undefined> {
     let root: string;
     try {
       root = await git(cwd, ["rev-parse", "--show-toplevel"]);
@@ -309,7 +310,7 @@ export class GitWatch {
       !onMain &&
       (baseSha ? !!head && !head.startsWith(baseSha) && !baseSha.startsWith(head) : ahead > 0 || (!!prev?.hadWork && prev.branch === branch));
     const base = new Set(baselineDirty ?? []);
-    const dirty = status ? status.split("\n").filter((l) => l && !base.has(l.slice(3))).length : 0;
+    const dirty = status ? status.split("\n").filter((l) => l && !base.has(l.slice(3)) && (!owns || owns(porcelainPath(l), root))).length : 0;
     const merged =
       !onMain && !!head && ahead === 0 && dirty === 0 && (hadWork || (!baseSha && behind > 0)) &&
       (await ok(cwd, ["merge-base", "--is-ancestor", "HEAD", ref]));
@@ -382,3 +383,5 @@ export class GitWatch {
   }
 }
 
+/** The path in a `git status --porcelain` line (the new name for a rename, unquoted). */
+export const porcelainPath = (line: string) => line.slice(3).replace(/^.* -> /, "").replace(/^"|"$/g, "");

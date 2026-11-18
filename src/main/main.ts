@@ -287,7 +287,12 @@ app.whenReady().then(async () => {
   handle("fs:write", (sessionId: string, path: string, text: string) => hub.writeSessionFile(sessionId, path, text));
   handle("hub:resolveLink", async (sessionId: string, raw: string) => resolveLink(raw, await hub.linkRoots(sessionId), (name) => hub.pathHints(sessionId, name)));
   handle("hub:readDir", (path: string) => readDir(path));
-  handle("hub:gitChanges", (cwd: string) => gitChanges(cwd));
+  handle("hub:gitChanges", async (cwd: string, sessionId?: string) => {
+    const changes = await gitChanges(cwd);
+    if (!sessionId) return changes;
+    const mine = hub.changesOwnedBy(sessionId, cwd, changes);
+    return changes.map((c, i) => ({ ...c, mine: mine[i] }));
+  });
   handle("hub:usageToday", () => hub.usageToday());
   handle("hub:limits", () => hub.limits());
   handle("hub:cloud", (refresh?: boolean) => hub.cloud(refresh));
@@ -635,17 +640,21 @@ app.whenReady().then(async () => {
     if (isDraft(path)) rmSync(path, { force: true });
   });
   /** Save a draft to ~/Movies/Happy, cut to [start, start + duration] when given (re-encoded, so the cut is frame-exact). */
-  handle("browser:finishRecording", async (path: string, start?: number, duration?: number) => {
+  handle("browser:finishRecording", async (path: string, start?: number, duration?: number, title?: string) => {
     if (!isDraft(path) || !existsSync(path)) throw new Error("That recording is gone.");
     const dir = join(app.getPath("videos"), "Happy");
     mkdirSync(dir, { recursive: true });
     const d = new Date();
     const p2 = (n: number) => String(n).padStart(2, "0");
-    const name = `Browser recording ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} at ${p2(d.getHours())}.${p2(d.getMinutes())}.${p2(d.getSeconds())}`;
-    let out = join(dir, `${name}.mp4`);
-    if (start != null && duration != null) {
-      out = join(dir, `${name} (trimmed).mp4`);
-      await ffmpeg(["-ss", start.toFixed(3), "-i", path, "-t", duration.toFixed(3), ...H264, out]);
+    // Your name for it (made safe for a filename), else a dated default; never overwrites an existing video.
+    const given = (title ?? "").replace(/\0/g, "").replace(/\s*[\/:]\s*/g, " - ").replace(/\s+/g, " ").replace(/^\.+/, "").trim().slice(0, 120);
+    const name = given || `Browser recording ${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} at ${p2(d.getHours())}.${p2(d.getMinutes())}.${p2(d.getSeconds())}`;
+    const trimmed = start != null && duration != null;
+    const base = given ? name : trimmed ? `${name} (trimmed)` : name;
+    let out = join(dir, `${base}.mp4`);
+    for (let n = 2; existsSync(out); n++) out = join(dir, `${base} ${n}.mp4`);
+    if (trimmed) {
+      await ffmpeg(["-ss", start!.toFixed(3), "-i", path, "-t", duration!.toFixed(3), ...H264, out]);
     } else copyFileSync(path, out);
     rmSync(path, { force: true });
     return out;

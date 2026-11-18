@@ -138,7 +138,7 @@ export function PreviewPane(props: {
           <DiffView key={active.key} path={active.path} ops={diffLines(active.before, active.after)} isNew={active.before === ""} />
         )}
         {active?.kind === "gitdiff" && <GitDiffView key={active.key} path={active.path} cwd={active.cwd} />}
-        {active?.kind === "changes" && <ChangesView roots={props.checkouts?.length ? props.checkouts : [{ path: props.cwd, label: "this folder" }]} />}
+        {active?.kind === "changes" && <ChangesView sessionId={props.sessionId} roots={props.checkouts?.length ? props.checkouts : [{ path: props.cwd, label: "this folder" }]} />}
         {active?.kind === "terminal" && <TerminalPane key={props.sessionId} id={`s-${props.sessionId}`} cwd={props.cwd} />}
         {active?.kind === "pins" && <PinsView sessionId={props.sessionId} items={props.items ?? []} />}
         {active?.kind === "dir" && <DirView key={active.key} path={active.path} />}
@@ -641,8 +641,10 @@ function DirView({ path }: { path: string }) {
 
 /** Changed-files list (git status + numstat) over the selected file's diff. Refreshes every few seconds. */
 /** Uncommitted changes in every checkout the chat works in (its folder plus worktrees it tracks), with the selected file's diff. */
-function ChangesView({ roots }: { roots: Array<{ path: string; label: string }> }) {
+function ChangesView({ roots, sessionId }: { roots: Array<{ path: string; label: string }>; sessionId: string }) {
   const [all, setAll] = useState<Record<string, GitChange[]> | null>(null);
+  // In a checkout shared with other chats (main), changes this chat didn't touch sit folded away.
+  const [showOthers, setShowOthers] = useState(false);
   const [sel, setSel] = useState<{ root: string; path: string } | null>(null);
   const [diff, setDiff] = useState<string | null>(null);
   const key = roots.map((r) => r.path).join("|");
@@ -650,16 +652,17 @@ function ChangesView({ roots }: { roots: Array<{ path: string; label: string }> 
   useEffect(() => {
     let live = true;
     const load = () =>
-      Promise.all(roots.map((r) => hub().gitChanges(r.path).catch(() => [] as GitChange[]))).then((lists) => live && setAll(Object.fromEntries(roots.map((r, i) => [r.path, lists[i]]))));
+      Promise.all(roots.map((r) => hub().gitChanges(r.path, sessionId).catch(() => [] as GitChange[]))).then((lists) => live && setAll(Object.fromEntries(roots.map((r, i) => [r.path, lists[i]]))));
     load();
     const t = setInterval(load, 4000);
     return () => {
       live = false;
       clearInterval(t);
     };
-  }, [key]);
+  }, [key, sessionId]);
 
-  const groups = roots.map((r) => ({ ...r, changes: all?.[r.path] ?? [] })).filter((g) => g.changes.length || roots.length === 1);
+  const others = roots.flatMap((r) => (all?.[r.path] ?? []).filter((c) => c.mine === false).map((c) => ({ root: r.path, c })));
+  const groups = roots.map((r) => ({ ...r, changes: (all?.[r.path] ?? []).filter((c) => c.mine !== false) })).filter((g) => g.changes.length || roots.length === 1);
   const first = groups.find((g) => g.changes.length);
   const current = sel ?? (first ? { root: first.path, path: first.changes[0].path } : null);
   useEffect(() => {
@@ -696,9 +699,25 @@ function ChangesView({ roots }: { roots: Array<{ path: string; label: string }> 
             ))}
           </Fragment>
         ))}
+        {others.length > 0 && (
+          <>
+            <div className="changes-root changes-others" onClick={() => setShowOthers(!showOthers)} title="Uncommitted in this checkout, but this chat didn't touch them (another chat's, or yours)">
+              {showOthers ? "▾" : "▸"} {num(others.length)} other change{others.length === 1 ? "" : "s"} in this checkout
+            </div>
+            {showOthers &&
+              others.map(({ root, c }) => (
+                <div key={c.path} className={`f other ${current?.root === root && c.path === current.path ? "on" : ""}`} onClick={() => setSel({ root, path: c.path })} title={c.path}>
+                  <span>{c.status === "?" ? "A" : c.status}</span>
+                  <span>{c.rel}</span>
+                  <span className="add">{c.add ? `+${c.add}` : ""}</span>
+                  <span className="del">{c.del ? `−${c.del}` : ""}</span>
+                </div>
+              ))}
+          </>
+        )}
       </div>
       <div className="file-body">
-        {all && flat.length === 0 && <div className="muted pad">No uncommitted changes{roots.length > 1 ? ` in this chat's ${roots.length} checkouts` : ""}.</div>}
+        {all && flat.length === 0 && <div className="muted pad">No uncommitted changes{others.length ? " of this chat's" : ""}{roots.length > 1 ? ` in its ${roots.length} checkouts` : ""}.</div>}
         {diff && !diff.startsWith("(git diff unavailable") && <DiffRows ops={parseUnified(diff)} />}
       </div>
     </div>

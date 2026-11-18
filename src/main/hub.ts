@@ -1226,7 +1226,7 @@ export class Hub implements SessionHost {
     this.gitChecked.set(s.id, Date.now());
     void (async () => {
       if (!s.meta.worktree?.removed) {
-        const info = await this.gitWatch.check(s.meta.cwd, s.meta.git, s.meta.baselineDirty, s.meta.worktree?.baseSha);
+        const info = await this.gitWatch.check(s.meta.cwd, s.meta.git, s.meta.baselineDirty, s.meta.worktree?.baseSha, s.meta.worktree ? undefined : this.ownsChange(s));
         if (!this.sessions.has(s.id)) return;
         const same = JSON.stringify({ ...info, checkedAt: 0 }) === JSON.stringify({ ...s.meta.git, checkedAt: 0 });
         if (!same) s.update({ git: info, gitBranch: info?.branch });
@@ -1234,6 +1234,36 @@ export class Hub implements SessionHost {
       await this.detectWorktrees(s);
       await this.refreshLinked(s);
     })();
+  }
+
+  /**
+   * A checkout shared with other chats (no worktree of its own, e.g. main): a change there is this chat's only if
+   * its tool calls touched or named the path. Otherwise every chat in main shows every other chat's files.
+   */
+  ownsChange(s: Session): (rel: string, root: string) => boolean {
+    let seen: string | undefined;
+    const said = () =>
+      (seen ??= s.items
+        .filter((i) => i.kind === "tool")
+        .map((i) => `${i.path ?? ""}\n${i.text}\n${i.detail ?? ""}`)
+        .join("\n"));
+    return (rel, root) => {
+      const p = rel.replace(/\/+$/, "");
+      if (!p) return false;
+      const abs = join(root, p);
+      const fromCwd = abs.startsWith(`${s.meta.cwd}/`) ? abs.slice(s.meta.cwd.length + 1) : undefined;
+      const text = said();
+      return text.includes(abs) || text.includes(p) || (!!fromCwd && text.includes(fromCwd));
+    };
+  }
+
+  /** Whether each change in a chat's folder is its own (see ownsChange); worktrees and other folders are all its own. */
+  changesOwnedBy(sessionId: string, cwd: string, changes: Array<{ path: string; rel: string }>): boolean[] {
+    const s = this.sessions.get(sessionId);
+    if (!s || s.meta.worktree || cwd !== s.meta.cwd) return changes.map(() => true);
+    const base = new Set(s.meta.baselineDirty ?? []);
+    const owns = this.ownsChange(s);
+    return changes.map((c) => !base.has(c.rel) && owns(c.rel, c.path.slice(0, c.path.length - c.rel.length).replace(/\/$/, "")));
   }
 
   private detecting = new Set<string>();
