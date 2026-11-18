@@ -513,8 +513,40 @@ function BranchBlock({ c }: { c: Checkout }) {
   );
 }
 
+/**
+ * Forks listed under the chat they came from (when it's in the same list), like Claude does. A family sits where its
+ * most recently active member would, and each level keeps the list's order.
+ */
+export function nestForks(list: SessionState[]): { s: SessionState; depth: number }[] {
+  const ids = new Set(list.map((x) => x.id));
+  const kids = new Map<string, SessionState[]>();
+  const parentOf = (x: SessionState) => (x.forkedFrom && x.forkedFrom !== x.id && ids.has(x.forkedFrom) ? x.forkedFrom : undefined);
+  for (const x of list) {
+    const p = parentOf(x);
+    if (p) kids.set(p, [...(kids.get(p) ?? []), x]);
+  }
+  const byId = new Map(list.map((x) => [x.id, x]));
+  const rootOf = (x: SessionState) => {
+    const seen = new Set<string>();
+    let r = x;
+    for (let p = parentOf(r); p && !seen.has(p); p = parentOf(r)) (seen.add(r.id), (r = byId.get(p)!));
+    return r;
+  };
+  const out: { s: SessionState; depth: number }[] = [];
+  const done = new Set<string>();
+  const add = (x: SessionState, depth: number) => {
+    if (done.has(x.id)) return;
+    done.add(x.id);
+    out.push({ s: x, depth });
+    for (const k of kids.get(x.id) ?? []) add(k, depth + 1);
+  };
+  for (const x of list) add(rootOf(x), 0);
+  return out;
+}
+
 function Row(props: {
   s: SessionState;
+  depth?: number;
   active: boolean;
   unread?: "done" | "blocked" | "failed";
   renaming: boolean;
@@ -529,7 +561,8 @@ function Row(props: {
   const { s } = props;
   return (
     <div
-      className={`r ${props.active ? "on" : ""} ${props.unread ? "unread" : ""} ${s.status}`}
+      className={`r ${props.active ? "on" : ""} ${props.unread ? "unread" : ""} ${s.status} ${props.depth ? "r-fork" : ""}`}
+      style={props.depth ? { marginLeft: Math.min(props.depth, 3) * 14 } : undefined}
       onMouseEnter={(e) => props.onHover(s, e.currentTarget)}
       onMouseLeave={() => props.onHover(null)}
       onClick={props.onClick}
@@ -560,7 +593,8 @@ function Row(props: {
           />
         ) : (
           <span className="r-title">
-            {s.title}
+            {/* Nested under its parent, "(fork)" says nothing new. */}
+            {props.depth ? s.title.replace(/( \(fork\))+$/, "") : s.title}
           </span>
         )}
         {props.inGrid && (
@@ -762,10 +796,12 @@ export function Sidebar(props: {
   }, []);
 
   const gridIds = useGrid();
-  const row = (s: SessionState) => (
+  const rows = (list: SessionState[]) => nestForks(list).map(({ s, depth }) => row(s, depth));
+  const row = (s: SessionState, depth = 0) => (
     <Row
       key={s.id}
       s={s}
+      depth={depth}
       active={s.id === props.selected}
       unread={props.unread.get(s.id)}
       renaming={renaming === s.id}
@@ -845,7 +881,7 @@ export function Sidebar(props: {
           members={ungrouped}
           onDropSession={(id) => hub().moveToGroup(id, null)}
         >
-          {ungrouped.map(row)}
+          {rows(ungrouped)}
           {live.length === 0 && <div className="drop-hint">{filtering ? "no matches" : "no sessions yet"}</div>}
         </Group>
 
@@ -873,7 +909,7 @@ export function Sidebar(props: {
                 ])
               }
             >
-              {members.map(row)}
+              {rows(members)}
               {members.length === 0 && <div className="drop-hint">drag sessions here</div>}
             </Group>
           );
@@ -913,13 +949,13 @@ export function Sidebar(props: {
               } catch {}
             }}
           >
-            {routines.map(row)}
+            {rows(routines)}
           </Group>
         )}
 
         {archived.length > 0 && (
           <Group title="Archived" members={archived} collapsed={!showArchived && !filtering} onToggle={() => setShowArchived(!showArchived)}>
-            {archived.map(row)}
+            {rows(archived)}
           </Group>
         )}
       </div>

@@ -273,6 +273,7 @@ export class Hub implements SessionHost {
     } catch {}
     this.file = join(dataDir, "hub-state.json");
     this.load();
+    this.linkOlderForks();
     if (![...this.sessions.values()].some((s) => s.meta.isManager)) {
       this.createSession({ engine: "claude", cwd: homedir(), title: "Manager" }, true);
     }
@@ -1733,6 +1734,7 @@ export class Hub implements SessionHost {
       id: randomUUID(),
       title: `${src.meta.title} (fork)`,
       titleSource: "user",
+      forkedFrom: src.meta.id,
       archived: undefined,
       createdAt: now,
       updatedAt: now,
@@ -1747,6 +1749,19 @@ export class Hub implements SessionHost {
     s.note(`Forked from "${src.meta.title}"`);
     this.changed(s);
     return s;
+  }
+
+  /** Forks made before forks remembered their parent: match "X (fork)" to the chat titled "X" (same folder first). */
+  private linkOlderForks() {
+    const all = [...this.sessions.values()];
+    for (const s of all) {
+      const m = s.meta;
+      if (m.forkedFrom || !m.title.endsWith(" (fork)")) continue;
+      const parentTitle = m.title.slice(0, -" (fork)".length);
+      const cands = all.filter((p) => p !== s && p.meta.title === parentTitle && p.meta.createdAt <= m.createdAt);
+      const parent = cands.find((p) => p.meta.cwd === m.cwd) ?? cands[0];
+      if (parent) m.forkedFrom = parent.meta.id;
+    }
   }
 
   async removeWorktree(id: string) {

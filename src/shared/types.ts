@@ -32,6 +32,8 @@ export interface SessionMeta {
   /** Codex sandbox: workspace-write (default; .git stays read-only), danger-full-access (can commit/merge), read-only. */
   codexSandbox?: CodexSandbox;
   cursorMode?: CursorMode;
+  /** The chat this one was forked from (listed under it in the sidebar). */
+  forkedFrom?: string;
   /** Sidebar group (undefined = ungrouped). */
   groupId?: string;
   /** A routine's chat (Claude or Codex app routine id, e.g. "claude:sync-prod-prompts"): shows one run at a time. */
