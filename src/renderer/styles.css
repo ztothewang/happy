@@ -2018,3 +2018,10 @@ pre.code { position: relative; }
 .rec-ed-name:hover { border-color: var(--div); }
 .rec-ed-name:focus { border-color: var(--accent); background: var(--bg); }
 .rec-ed-name::placeholder { color: var(--dim); font-weight: 500; }
+
+/* Linear: sub-issues name their parent (row chip; panel header). */
+.tk-parent { font: 11px var(--fm); color: var(--dim); margin-right: 6px; white-space: nowrap; }
+.tk-parent-of { min-width: 0; font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tk-parent-of .link-btn { font-size: 12px; padding: 0; }
+.tk-parent-title { color: var(--dim); }
+.tk-side-h > .mono { white-space: nowrap; flex-shrink: 0; }

@@ -15,7 +15,7 @@ const EXT: Record<string, string> = { "image/png": ".png", "image/jpeg": ".jpg",
  * and stored in Happy's data folder; it is only ever sent to api.linear.app.
  */
 const ISSUE_FIELDS = `id identifier title priority priorityLabel url branchName createdAt updatedAt dueDate estimate
-  state { name type color } assignee { name } project { name } parent { identifier } team { key }
+  state { name type color } assignee { name } project { name } parent { id identifier title } team { key }
   labels { nodes { name color } }`;
 
 function toIssue(n: any): LinearIssue {
@@ -37,6 +37,8 @@ function toIssue(n: any): LinearIssue {
     assignee: n.assignee?.name,
     project: n.project?.name,
     parent: n.parent?.identifier,
+    parentTitle: n.parent?.title,
+    parentId: n.parent?.id,
     team: n.team?.key,
     labels: (n.labels?.nodes ?? []).map((l: any) => ({ name: l.name, color: l.color })),
   };
@@ -245,11 +247,12 @@ export function taskPrompt(issue: LinearIssue, detail: LinearIssueDetail): strin
   const parts = [
     `Work on Linear issue ${issue.identifier}: ${issue.title}`,
     `Link: ${issue.url}`,
+    issue.parent && `Sub-issue of ${issue.parent}${issue.parentTitle ? `: ${issue.parentTitle}` : ""} (keep the change to this part of it).`,
     [`Priority: ${issue.priorityLabel}`, `Status: ${issue.status}`, issue.project && `Project: ${issue.project}`, issue.labels.length && `Labels: ${issue.labels.map((l) => l.name).join(", ")}`]
       .filter(Boolean)
       .join(" · "),
     detail.description.trim() ? `## Description\n${detail.description.trim()}` : "(No description.)",
-  ];
+  ].filter((x): x is string => !!x);
   if (detail.children.length) parts.push(`## Sub-issues\n${detail.children.map((c) => `- ${c.identifier} ${c.title} (${c.status})`).join("\n")}`);
   if (detail.comments.length) parts.push(`## Comments\n${detail.comments.map((c) => `**${c.author}:** ${c.body.trim()}`).join("\n\n")}`);
   if (detail.attachments.length) parts.push(`## Attachments\n${detail.attachments.map((a) => `- ${a.title}: ${a.url}`).join("\n")}`);

@@ -596,7 +596,10 @@ export interface LinearIssue {
   statusColor?: string;
   assignee?: string;
   project?: string;
+  /** Set for a sub-issue: the parent's identifier, title and id. */
   parent?: string;
+  parentTitle?: string;
+  parentId?: string;
   team?: string;
   labels: Array<{ name: string; color?: string }>;
 }

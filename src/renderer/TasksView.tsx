@@ -283,8 +283,10 @@ function diff(f: Form, base: Form): LinearIssueInput {
   return out;
 }
 
-function IssuePanel({ issue, sessions, engine, onEngine, onStart, onOpen, onClose, width }: {
+function IssuePanel({ issue, sessions, engine, onEngine, onStart, onOpen, onClose, width, onOpenParent }: {
   issue: LinearIssue;
+  /** Open the parent issue in the panel (when it's in the list). */
+  onOpenParent?(): void;
   sessions: SessionState[];
   engine: Engine;
   onEngine(e: Engine): void;
@@ -351,6 +353,19 @@ function IssuePanel({ issue, sessions, engine, onEngine, onStart, onOpen, onClos
     <aside className="tk-side" style={{ width }}>
       <div className="tk-side-h">
         <span className="mono muted">{issue.identifier}</span>
+        {issue.parent && (
+          <span className="tk-parent-of" title={issue.parentTitle}>
+            sub-issue of{" "}
+            {onOpenParent ? (
+              <button className="link-btn mono" onClick={onOpenParent}>
+                {issue.parent}
+              </button>
+            ) : (
+              <span className="mono">{issue.parent}</span>
+            )}
+            {issue.parentTitle && <span className="tk-parent-title"> {issue.parentTitle}</span>}
+          </span>
+        )}
         <a className="cl-ext" href={issue.url} target="_blank" rel="noreferrer">
           open in Linear ↗
         </a>
@@ -682,6 +697,11 @@ export function TasksView({ sessions, onOpen }: { sessions: Record<string, Sessi
                       </td>
                       <td className="mono muted">{i.identifier}</td>
                       <td className="tk-title">
+                        {i.parent && (
+                          <span className="tk-parent" title={`Sub-issue of ${i.parent}${i.parentTitle ? ` · ${i.parentTitle}` : ""}`}>
+                            ↳ {i.parent}
+                          </span>
+                        )}
                         <span className="tk-title-text">{i.title}</span>
                         {i.labels.slice(0, 3).map((l) => (
                           <span key={l.name} className="tk-label" style={{ ["--c" as string]: l.color ?? "var(--dim)" }}>
@@ -740,6 +760,10 @@ export function TasksView({ sessions, onOpen }: { sessions: Record<string, Sessi
             onStart={() => void start(openIssue)}
             onOpen={onOpen}
             onClose={() => setOpen(null)}
+            onOpenParent={(() => {
+              const p = openIssue.parentId && list?.issues.find((x) => x.id === openIssue.parentId);
+              return p ? () => setOpen(p.id) : undefined;
+            })()}
             width={sideWidth}
           />
         )
