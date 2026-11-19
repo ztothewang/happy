@@ -254,8 +254,14 @@ export function taskPrompt(issue: LinearIssue, detail: LinearIssueDetail): strin
   if (detail.comments.length) parts.push(`## Comments\n${detail.comments.map((c) => `**${c.author}:** ${c.body.trim()}`).join("\n\n")}`);
   if (detail.attachments.length) parts.push(`## Attachments\n${detail.attachments.map((a) => `- ${a.title}: ${a.url}`).join("\n")}`);
   parts.push(
-    `Investigate first, then implement following the repo's instructions (AGENTS.md / CLAUDE.md). Mention ${issue.identifier} in your commit messages. ` +
-      `If the issue is ambiguous, ask me before building. When you're done, summarize what changed and what's left.`,
+    [
+      "## How to work",
+      "1. Investigate first. Where the issue depends on real data or behavior, check the primary sources (the database, logs, the data sources involved) instead of guessing from the code alone.",
+      "2. If the task is unclear or there's more than one reasonable reading, ask me clarifying questions before building. Don't assume.",
+      `3. Implement following the repo's instructions (AGENTS.md / CLAUDE.md). Mention ${issue.identifier} in your commit messages.`,
+      "4. Once the code is done, spawn an expert code-review subagent to review the change for best practices, bugs, breaking changes and test coverage, then revise based on what it finds. (If you can't spawn subagents, do that review as a separate, deliberate pass yourself.)",
+      "5. When you're done, summarize what changed, what the review caught, and what's left.",
+    ].join("\n"),
   );
   return parts.join("\n\n");
 }
