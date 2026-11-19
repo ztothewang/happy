@@ -170,8 +170,17 @@ app.whenReady().then(async () => {
     } catch {}
   }
 
-  protocol.handle("hubfile", (req) => {
-    const path = decodeURIComponent(new URL(req.url).pathname.slice(1));
+  protocol.handle("hubfile", async (req) => {
+    const u = new URL(req.url);
+    const path = decodeURIComponent(u.pathname.slice(1));
+    // hubfile://linear/<encoded upload URL>: a Linear image, fetched with your key and cached.
+    if (u.host === "linear") {
+      try {
+        return net.fetch(pathToFileURL(await hub.linear.upload(path)).toString());
+      } catch (e) {
+        return new Response(String((e as Error).message), { status: 404 });
+      }
+    }
     return net.fetch(pathToFileURL(path).toString());
   });
 

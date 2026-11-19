@@ -892,7 +892,13 @@ export class Hub implements SessionHost {
   async startTask(issueId: string, engine: Engine): Promise<Session> {
     const issue = [...this.taskCache.values()].flatMap((l) => l.issues).find((i) => i.id === issueId || i.identifier === issueId);
     if (!issue) throw new Error("Issue not loaded; refresh Tasks and try again");
-    const detail = await this.linear.issueDetail(issue.id);
+    const raw = await this.linear.issueDetail(issue.id);
+    // Screenshots pasted into the issue only load with the Linear key: hand the agent local copies.
+    const detail = {
+      ...raw,
+      description: await this.linear.localizeUploads(raw.description),
+      comments: await Promise.all(raw.comments.map(async (c) => ({ ...c, body: await this.linear.localizeUploads(c.body) }))),
+    };
     const repo = [...this.sessions.values()].find((s) => !isSystemSession(s.meta))?.meta.worktree?.repo ?? settings().repo;
     return this.createSessionAsync({
       engine,

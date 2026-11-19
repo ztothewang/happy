@@ -23,7 +23,9 @@ const marked = new Marked({
     image({ href, text }) {
       // Local files (Codex shows its outputs this way) load through Happy's file route; videos get a player.
       const local = /^(\/|~\/|file:\/\/)/.test(href);
-      const src = local ? fileUrl(href.replace(/^file:\/\//, "").replace(/^~\//, "/Users/")) : href;
+      // Linear screenshots only load with your Linear key: Happy fetches those (desktop; the phone gets the link).
+      const linear = /^https:\/\/uploads\.linear\.app\//i.test(href) && !(window as { hub?: { isRemote?: boolean } }).hub?.isRemote;
+      const src = local ? fileUrl(href.replace(/^file:\/\//, "").replace(/^~\//, "/Users/")) : linear ? `hubfile://linear/${encodeURIComponent(href)}` : href;
       if (/\.(mp4|mov|webm|m4v)$/i.test(href)) return `<video class="md-video" controls preload="metadata" src="${escapeHtml(src)}"></video>`;
       return `<img src="${escapeHtml(src)}" alt="${escapeHtml(text ?? "")}" />`;
     },

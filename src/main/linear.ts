@@ -1,9 +1,14 @@
 import { safeStorage } from "electron";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { LinearIssue, LinearIssueDetail, LinearIssueInput, LinearMeta, LinearStatus, TaskScope } from "../shared/types.js";
 
 const API = "https://api.linear.app/graphql";
+/** Files pasted into Linear (screenshots in issues and comments) live here and need the API key to fetch. */
+export const isLinearUpload = (url: string) => /^https:\/\/uploads\.linear\.app\//i.test(url);
+const UPLOAD_RE = /https:\/\/uploads\.linear\.app\/[^\s)"'<>\]]+/gi;
+const EXT: Record<string, string> = { "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp", "image/svg+xml": ".svg", "video/mp4": ".mp4", "video/quicktime": ".mov", "application/pdf": ".pdf" };
 
 /**
  * Direct Linear GraphQL client. The personal API key is encrypted with the OS keychain (Electron safeStorage)
@@ -42,8 +47,11 @@ export class Linear {
   private viewer?: { name: string; email: string };
   private file: string;
 
+  private uploads: string;
+
   constructor(dataDir: string) {
     this.file = join(dataDir, "linear-key.bin");
+    this.uploads = join(dataDir, "linear-uploads");
     try {
       if (existsSync(this.file) && safeStorage.isEncryptionAvailable()) this.key = safeStorage.decryptString(readFileSync(this.file));
     } catch {
@@ -63,6 +71,33 @@ export class Linear {
     if (res.status === 401 || body.errors?.some((e: any) => /auth/i.test(e.extensions?.code ?? e.message))) throw new Error("Linear rejected the API key");
     if (!res.ok || body.errors) throw new Error(body.errors?.[0]?.message ?? `Linear HTTP ${res.status}`);
     return body.data as T;
+  }
+
+  /** A Linear upload saved locally (fetched once with your key, then cached); returns its path. */
+  async upload(url: string): Promise<string> {
+    if (!isLinearUpload(url)) throw new Error("Not a Linear upload");
+    if (!this.key) throw new Error("Linear isn't connected");
+    const id = createHash("sha1").update(url).digest("hex").slice(0, 20);
+    mkdirSync(this.uploads, { recursive: true });
+    const hit = readdirSync(this.uploads).find((f) => f.startsWith(`${id}.`) || f === id);
+    if (hit) return join(this.uploads, hit);
+    const res = await fetch(url, { headers: { Authorization: this.key }, signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) throw new Error(`Linear upload HTTP ${res.status}`);
+    const type = (res.headers.get("content-type") ?? "").split(";")[0].trim();
+    const path = join(this.uploads, id + (EXT[type] ?? ""));
+    writeFileSync(path, Buffer.from(await res.arrayBuffer()));
+    return path;
+  }
+
+  /** Swap Linear upload links in issue text for local copies (agents can open those; the links need the key). */
+  async localizeUploads(text: string): Promise<string> {
+    const urls = [...new Set(text.match(UPLOAD_RE) ?? [])];
+    let out = text;
+    for (const u of urls) {
+      const p = await this.upload(u).catch(() => undefined);
+      if (p) out = out.split(u).join(p);
+    }
+    return out;
   }
 
   async status(): Promise<LinearStatus> {
