@@ -593,6 +593,7 @@ app.whenReady().then(async () => {
     return r.canceled ? [] : r.filePaths;
   });
   handle("hub:simplify", (sessionId: string, itemId: string) => hub.simplify(sessionId, itemId));
+  handle("hub:chatAbout", async (ids: string[]) => (await hub.chatAbout(ids)).snapshot());
   handle("hub:checkTags", (sessionId: string) => (demo ? { add: [], remove: [] } : hub.checkTags(sessionId)));
   handle("app:setBadge", (n: number) => {
     if (process.platform === "darwin") app.dock?.setBadge(n > 0 ? String(n) : "");

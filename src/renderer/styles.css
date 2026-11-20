@@ -2062,3 +2062,12 @@ pre.code { position: relative; }
 .at-spin { animation: at-spin 1s linear infinite; color: var(--fg); }
 @keyframes at-spin { to { transform: rotate(360deg); } }
 .dp-publish { margin-left: 6px; font: 600 11.5px var(--f); color: var(--accent); }
+
+/* Sidebar multi-select (⌘-click / shift-click). */
+.r.picked { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.pick-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--div); background: var(--side); font: 12px var(--f); color: var(--dim); }
+.pick-bar > span { margin-right: auto; color: var(--fg); font-weight: 500; }
+.pick-bar button { font: 500 12px var(--f); color: var(--fg); background: var(--raise); border: 1px solid var(--div); border-radius: 6px; padding: 4px 8px; cursor: pointer; white-space: nowrap; }
+.pick-bar button:hover { border-color: var(--dim2); }
+.pick-bar .pick-go { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.pick-bar .pick-x { padding: 4px 7px; color: var(--dim); }

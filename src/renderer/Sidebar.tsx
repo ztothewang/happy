@@ -547,6 +547,8 @@ export function nestForks(list: SessionState[]): { s: SessionState; depth: numbe
 function Row(props: {
   s: SessionState;
   depth?: number;
+  /** In the multi-selection (⌘-click / shift-click). */
+  picked?: boolean;
   active: boolean;
   unread?: "done" | "blocked" | "failed";
   renaming: boolean;
@@ -561,7 +563,7 @@ function Row(props: {
   const { s } = props;
   return (
     <div
-      className={`r ${props.active ? "on" : ""} ${props.unread ? "unread" : ""} ${s.status} ${props.depth ? "r-fork" : ""}`}
+      className={`r ${props.active ? "on" : ""} ${props.picked ? "picked" : ""} ${props.unread ? "unread" : ""} ${s.status} ${props.depth ? "r-fork" : ""}`}
       style={props.depth ? { marginLeft: Math.min(props.depth, 3) * 14 } : undefined}
       onMouseEnter={(e) => props.onHover(s, e.currentTarget)}
       onMouseLeave={() => props.onHover(null)}
@@ -796,24 +798,79 @@ export function Sidebar(props: {
   }, []);
 
   const gridIds = useGrid();
+  // Multi-select: ⌘-click toggles a chat, shift-click selects a range (in the order shown); Esc clears.
+  const [picked, setPicked] = useState<string[]>([]);
+  const anchor = useRef<string | null>(null);
+  const shownOrder = [
+    ...nestForks(ungrouped),
+    ...props.groups.flatMap((g) => (g.collapsed && !filtering ? [] : nestForks(chats.filter((x) => x.groupId === g.id)))),
+    ...(routinesOpen || filtering ? nestForks(routines) : []),
+    ...(showArchived || filtering ? nestForks(archived) : []),
+  ].map((x) => x.s.id);
+  useEffect(() => {
+    if (!picked.length) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !(e.target as HTMLElement)?.closest?.("input, textarea") && setPicked([]);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [picked.length]);
+  const pickedChats = picked.map((id) => props.sessions.find((x) => x.id === id)).filter((x): x is SessionState => !!x);
+  const chatAbout = async (ids: string[]) => {
+    try {
+      const s = await hub().chatAbout(ids);
+      setPicked([]);
+      props.onSelect(s.id);
+    } catch (e) {
+      toast(`Couldn't start it: ${String((e as Error).message).replace(/^Error invoking remote method '[^']+': (Error: )?/, "")}`);
+    }
+  };
+  const addToGrid = (ids: string[]) => {
+    ids.forEach((id) => grid.add(id));
+    toast(`added ${ids.length} chat${ids.length === 1 ? "" : "s"} to the chat grid`);
+    setPicked([]);
+  };
+  const multiMenu = (ids: string[]) => [
+    { label: `New chat about ${ids.length === 1 ? "this chat" : `these ${ids.length} chats`}`, hint: "it reads up, then waits", onSelect: () => void chatAbout(ids) },
+    { label: "Add to chat grid", onSelect: () => addToGrid(ids) },
+    { type: "separator" as const },
+    { label: "Clear selection", hint: "esc", onSelect: () => setPicked([]) },
+  ];
   const rows = (list: SessionState[]) => nestForks(list).map(({ s, depth }) => row(s, depth));
   const row = (s: SessionState, depth = 0) => (
     <Row
       key={s.id}
       s={s}
       depth={depth}
+      picked={picked.includes(s.id)}
       active={s.id === props.selected}
       unread={props.unread.get(s.id)}
       renaming={renaming === s.id}
-      // ⌘-click: add to (or take out of) the chat grid instead of opening.
-      onClick={(e) =>
-        e.metaKey
-          ? (grid.toggle(s.id), toast(grid.ids().includes(s.id) ? `added "${s.title}" to the chat grid` : `removed "${s.title}" from the chat grid`))
-          : // On the grid, a chat that's in it scrolls to its card instead of leaving.
-            props.selected === GRID && grid.ids().includes(s.id)
-            ? window.dispatchEvent(new CustomEvent("happy:grid-focus", { detail: s.id }))
-            : props.onSelect(s.id)
-      }
+      // ⌘-click: pick (or unpick) for a multi-selection; shift-click: pick the range from the last one picked.
+      onClick={(e) => {
+        if (s.isManager) return props.onSelect(s.id);
+        if (e.metaKey) {
+          // The chat you're on joins the selection too, so ⌘-clicking one more gives you two.
+          const base = picked.length || !props.selected || props.selected === s.id || !shownOrder.includes(props.selected) ? picked : [props.selected];
+          setPicked(base.includes(s.id) ? base.filter((x) => x !== s.id) : [...base, s.id]);
+          anchor.current = s.id;
+          return;
+        }
+        if (e.shiftKey) {
+          const from = anchor.current ?? (props.selected && shownOrder.includes(props.selected) ? props.selected : null);
+          const a = from ? shownOrder.indexOf(from) : -1;
+          const b = shownOrder.indexOf(s.id);
+          if (a >= 0 && b >= 0) {
+            const range = shownOrder.slice(Math.min(a, b), Math.max(a, b) + 1);
+            setPicked((p) => [...new Set([...p, ...range])]);
+            anchor.current = from;
+            return;
+          }
+        }
+        if (picked.length) setPicked([]);
+        anchor.current = s.id;
+        // On the grid, a chat that's in it scrolls to its card instead of leaving.
+        if (props.selected === GRID && grid.ids().includes(s.id)) window.dispatchEvent(new CustomEvent("happy:grid-focus", { detail: s.id }));
+        else props.onSelect(s.id);
+      }}
       inGrid={gridIds.includes(s.id)}
       onRenamed={() => setRenaming(null)}
       onTag={(t) => props.onFilter(props.filter === `tag:${t}` ? "" : `tag:${t}`)}
@@ -822,6 +879,7 @@ export function Sidebar(props: {
         e.preventDefault();
         onHover(null);
         const { clientX: x, clientY: y } = e;
+        if (picked.length > 1 && picked.includes(s.id)) return menu.at(x, y, multiMenu(picked));
         const worktrees = s.isManager ? [] : await hub().listWorktrees(s.id).catch(() => []);
         menu.at(x, y, sessionMenuItems({ s, groups: props.groups, allTags: props.allTags, onRename: () => setRenaming(s.id), toast, worktrees }));
       }}
@@ -959,6 +1017,20 @@ export function Sidebar(props: {
           </Group>
         )}
       </div>
+      {pickedChats.length > 0 && (
+        <div className="pick-bar">
+          <span>
+            {pickedChats.length} selected
+          </span>
+          <button className="pick-go" onClick={() => void chatAbout(picked)} title="A new chat that reads up on these, then waits for your request">
+            New chat about these
+          </button>
+          <button onClick={() => addToGrid(picked)}>Add to grid</button>
+          <button className="pick-x" onClick={() => setPicked([])} title="Clear (esc)">
+            ×
+          </button>
+        </div>
+      )}
       {hover && props.sessions.find((x) => x.id === hover.id) && (
         <SessionCard
           s={props.sessions.find((x) => x.id === hover.id)!}

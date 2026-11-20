@@ -1840,6 +1840,61 @@ export class Hub implements SessionHost {
     }
   }
 
+  /**
+   * A new chat that starts out knowing about several others (sidebar: select, right-click): for each, what Happy knows
+   * (folder, worktrees, code state, tags, ticket, latest exchange) and where its full transcript lives. The agent
+   * reads up and then waits for your question.
+   */
+  async chatAbout(ids: string[]): Promise<Session> {
+    const list = ids.map((id) => this.sessions.get(id)).filter((s): s is Session => !!s && !isSystemSession(s.meta));
+    if (!list.length) throw new Error("Pick some chats first");
+    const home = process.env.HOME ?? "";
+    const tilde = (p: string) => (home && p.startsWith(home) ? `~${p.slice(home.length)}` : p);
+    const rollouts = list.some((s) => s.meta.engine === "codex") ? new Map((await listCodexThreads().catch(() => [])).map((t) => [t.id, t.rolloutPath])) : new Map<string, string>();
+    const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}…` : t);
+    const ago = (ts?: number) => (ts ? new Date(ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "?");
+    const gitLine = (g?: import("../shared/types.js").GitInfo) =>
+      !g ? "" : [g.branch && `branch ${g.branch}`, g.onMain ? "(main checkout)" : "", g.dirty ? `${g.dirty} uncommitted file(s)` : "", g.ahead ? `${g.ahead} commit(s) not on main` : "", g.merged ? "merged into main" : ""].filter(Boolean).join(", ");
+    const blocks = list.map((s, n) => {
+      const m = s.meta;
+      const lastUser = [...s.items].reverse().find((i) => i.kind === "user");
+      const lastReply = [...s.items].reverse().find((i) => i.kind === "assistant");
+      const transcript =
+        m.engine === "claude" && m.engineSessionId
+          ? `~/.claude/projects/${m.cwd.replace(/[^a-zA-Z0-9]/g, "-")}/${m.engineSessionId}.jsonl`
+          : m.engine === "codex" && m.engineSessionId && rollouts.get(m.engineSessionId)
+            ? tilde(rollouts.get(m.engineSessionId)!)
+            : undefined;
+      const linked = (m.linkedWorktrees ?? []).filter((w) => !w.removed);
+      return [
+        `### ${n + 1}. ${m.title}`,
+        `- Agent: ${m.engine}${m.model ? ` (${m.model})` : ""} · status ${s.status} · started ${ago(m.createdAt)} · last active ${ago(m.updatedAt)}`,
+        `- Folder: ${tilde(m.cwd)}${m.worktree && !m.worktree.removed ? ` (its own worktree, branch ${m.worktree.branch})` : ""}${m.git ? ` · ${gitLine(m.git)}` : ""}`,
+        ...linked.map((w) => `- Also works in: ${tilde(w.path)}${w.branch ? ` (branch ${w.branch})` : ""}${w.git ? ` · ${gitLine(w.git)}` : ""}`),
+        m.linearIssue ? `- Linear issue: ${m.linearIssue}` : "",
+        m.tags?.length ? `- Tags: ${m.tags.map((t) => `#${t}`).join(" ")}` : "",
+        transcript ? `- Full transcript: ${transcript}` : "",
+        lastUser ? `- Last request from me (${ago(lastUser.ts)}):\n${clip(lastUser.text.trim(), 800).replace(/^/gm, "  > ")}` : "",
+        lastReply ? `- Its latest reply (${ago(lastReply.ts)}):\n${clip(lastReply.text.trim(), 1800).replace(/^/gm, "  > ")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    });
+    const prompt = [
+      `Here are ${list.length} of my other chats for you to look at. For each: what Happy knows, where its code is, and where its full transcript is.`,
+      "You can read their worktrees and diffs (git status, git log main..HEAD, git diff main...HEAD) and their transcripts (JSONL, one event per line) to get the details.",
+      ...blocks,
+      "Read up as much as you need to understand them, then give me a two-line recap of each and wait for my request. Don't change anything yet.",
+    ].join("\n\n");
+    const titles = list.map((s) => s.meta.title);
+    return this.createSessionAsync({
+      engine: settings().defaultEngine,
+      cwd: settings().repo || list[0].meta.cwd,
+      title: clip(`About: ${titles.join(", ")}`, 80),
+      prompt,
+    });
+  }
+
   async removeWorktree(id: string) {
     const s = this.get(id);
     const wt = s.meta.worktree;

@@ -1231,6 +1231,8 @@ export interface HubApi {
   simplify(sessionId: string, itemId: string): Promise<void>;
   /** Ask the agent, out of sight, whether the chat's tags should change; changes show in the chat. */
   checkTags(sessionId: string): Promise<{ add: string[]; remove: string[] }>;
+  /** A new chat seeded with what Happy knows about these chats; it reads up and waits for your request. */
+  chatAbout(ids: string[]): Promise<SessionState>;
   gcloudStatus(): Promise<GcloudStatus>;
   cloud(refresh?: boolean): Promise<CloudSnapshot | null>;
   /** Start the Manager or Cloud chat over (fresh conversation, same settings). */

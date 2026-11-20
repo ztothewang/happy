@@ -282,7 +282,7 @@ export function ChatGridView({ sessions, onOpen, onBack, onWall }: { sessions: R
       onClick={(e) => addMenu(e.currentTarget)}
     >
       <Plus size={16} />
-      <span>{ids.length ? "drag a chat here to add it, or click" : "Drag chats here from the sidebar, ⌘-click them, or pick them on the Chat wall"}</span>
+      <span>{ids.length ? "drag a chat here to add it, or click" : "Drag chats here from the sidebar, ⌘-click several there and right-click → Add to chat grid, or pick them on the Chat wall"}</span>
     </div>
   );
   // 1 → full; 2 → side by side, full height; 3+ → two rows per screen, scrolling past four.
