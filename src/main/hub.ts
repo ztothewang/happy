@@ -33,7 +33,7 @@ import { listCodexThreads, readCodexHistory } from "./importCodex.js";
 import { computeStats } from "./stats.js";
 import { refreshCodexPrices } from "./codexPrices.js";
 import { claudeTitle, codexIndexTitle, generateTitle, simplifyText, titleFromPrompt } from "./titles.js";
-import { createWorktree, dirtyPaths, removeWorktree } from "./worktree.js";
+import { createWorktree, dirtyPaths, pushIfAhead, removeWorktree } from "./worktree.js";
 import { Session, clip, type SessionHost } from "./session.js";
 import { deployedParts, isDeployed, isSystemSession } from "../shared/types.js";
 import type {
@@ -1236,9 +1236,11 @@ export class Hub implements SessionHost {
         if (!this.sessions.has(s.id)) return;
         const same = JSON.stringify({ ...info, checkedAt: 0 }) === JSON.stringify({ ...s.meta.git, checkedAt: 0 });
         if (!same) s.update({ git: info, gitBranch: info?.branch });
+        if (s.meta.worktree && info) void this.autoPush(s, s.meta.cwd, info);
       }
       await this.detectWorktrees(s);
       await this.refreshLinked(s);
+      for (const w of s.meta.linkedWorktrees ?? []) if (!w.removed && w.git) void this.autoPush(s, w.path, w.git);
     })();
   }
 
@@ -1270,6 +1272,18 @@ export class Hub implements SessionHost {
     const base = new Set(s.meta.baselineDirty ?? []);
     const owns = this.ownsChange(s);
     return changes.map((c) => !base.has(c.rel) && owns(c.rel, c.path.slice(0, c.path.length - c.rel.length).replace(/\/$/, "")));
+  }
+
+  /** Commit last pushed (or tried) per worktree path, so each new commit is pushed once. */
+  private pushed = new Map<string, string>();
+  /** Keep worktree branches on origin: push when there are commits it doesn't have (Settings → Chats → Push worktrees). */
+  private async autoPush(s: Session, path: string, g: import("../shared/types.js").GitInfo) {
+    if (!settings().autoPush || demo || !g.head || !g.branch || g.onMain || g.merged || g.ahead <= 0) return;
+    if (this.pushed.get(path) === g.head) return;
+    this.pushed.set(path, g.head);
+    const mainName = (await this.gitWatch.mainName(path).catch(() => "main")) ?? "main";
+    const r = await pushIfAhead(path, g.branch, mainName);
+    if (r.error) s.note(`couldn't push ${g.branch} to origin: ${r.error}`);
   }
 
   private detecting = new Set<string>();

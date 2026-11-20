@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ],
   autoTags: true,
   nextSteps: true,
+  autoPush: true,
   profile: { name: "", email: "", company: "", signoff: "", style: "" },
 };
 
@@ -41,6 +42,7 @@ function merge(raw: Partial<AppSettings>): AppSettings {
       : DEFAULT_SETTINGS.tags,
     autoTags: raw.autoTags ?? DEFAULT_SETTINGS.autoTags,
     nextSteps: raw.nextSteps ?? DEFAULT_SETTINGS.nextSteps,
+    autoPush: raw.autoPush ?? DEFAULT_SETTINGS.autoPush,
     profile: { ...DEFAULT_SETTINGS.profile, ...raw.profile },
     codexPrices: raw.codexPrices,
     codexPricesAt: raw.codexPricesAt,

@@ -92,3 +92,31 @@ export async function dirtyPaths(cwd: string): Promise<string[]> {
     return [];
   }
 }
+
+/**
+ * Push a branch to origin if it has commits origin doesn't (no upstream yet, or ahead of it). Never main, never
+ * forced. Returns what happened; `error` is git's first line (a rejected push, a failing pre-push hook…).
+ */
+export async function pushIfAhead(cwd: string, branch: string, mainName: string): Promise<{ pushed: boolean; error?: string }> {
+  if (!branch || branch === "HEAD" || branch === mainName || /^(main|master)$/.test(branch)) return { pushed: false };
+  try {
+    await git(cwd, ["remote", "get-url", "origin"]);
+  } catch {
+    return { pushed: false }; // no remote to push to
+  }
+  let unpushed = 1;
+  try {
+    unpushed = Number(await git(cwd, ["rev-list", "--count", "@{u}..HEAD"]));
+  } catch {
+    // no upstream yet: first push
+  }
+  if (!unpushed) return { pushed: false };
+  try {
+    await run("git", ["push", "-u", "origin", `HEAD:refs/heads/${branch}`], { cwd, timeout: 180_000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+    await git(cwd, ["branch", "--set-upstream-to", `origin/${branch}`]).catch(() => {});
+    return { pushed: true };
+  } catch (e) {
+    const err = e as { stderr?: string; message: string };
+    return { pushed: false, error: String(err.stderr || err.message).trim().split("\n").find((l) => l.trim() && !/^(To |hint:)/.test(l)) ?? "push failed" };
+  }
+}

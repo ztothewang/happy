@@ -303,6 +303,13 @@ function Tags({ s }: { s: AppSettings }) {
         </div>
         <Toggle id="auto-tags" on={s.autoTags} onChange={(v) => void hub().saveSettings({ autoTags: v })} />
       </div>
+      <div className="st-row">
+        <div>
+          <b>Push worktrees</b>
+          <span className="muted small">push a chat's worktree branch to origin whenever it has new commits (never main, never forced); a failed push shows as a line in the chat</span>
+        </div>
+        <Toggle id="auto-push" on={s.autoPush} onChange={(v) => void hub().saveSettings({ autoPush: v })} />
+      </div>
       <div className="st-row st-col">
         <div>
           <b>Session tags</b>

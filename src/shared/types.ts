@@ -829,6 +829,8 @@ export interface AppSettings {
   codexPricesAt?: number;
   /** After each reply, ask the same agent (out of sight) for 2–4 next steps and offer them as chips. */
   nextSteps: boolean;
+  /** Push a chat's worktree branch to origin whenever it has commits the remote doesn't (never main, never forced). */
+  autoPush: boolean;
   /** App zoom level (Chromium steps: 0 = 100%, each step ≈ 20%). */
   zoom?: number;
 }

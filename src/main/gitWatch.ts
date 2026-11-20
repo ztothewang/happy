@@ -84,6 +84,12 @@ interface RepoCache {
 export class GitWatch {
   private repos = new Map<string, RepoCache>();
 
+  /** The main branch's name for the repo a folder is in ("main", "master"…). */
+  async mainName(cwd: string): Promise<string> {
+    const root = await git(cwd, ["rev-parse", "--show-toplevel"]);
+    return (await this.repo(root)).mainRef.replace(/^origin\//, "");
+  }
+
   private async repo(root: string): Promise<RepoCache> {
     let r = this.repos.get(root);
     if (!r) {
