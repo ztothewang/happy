@@ -163,6 +163,8 @@ export interface AnalyticsEvent {
   path?: string;
   /** Autocapture: "click Save". */
   action?: string;
+  /** Where the visitor was (PostHog GeoIP): "Austin, TX". */
+  location?: string;
 }
 
 export interface AnalyticsEventDetail {
@@ -192,7 +194,8 @@ export interface AnalyticsSnapshot {
   /** The PostHog project, for "open in PostHog". */
   link?: string;
   envs: Array<{ id: string; name: string; color?: string; users: number; events: number }>;
-  people: Array<{ email: string; env?: string; events: number; lastSeen: number }>;
+  /** location: where their latest event came from. */
+  people: Array<{ email: string; env?: string; events: number; lastSeen: number; location?: string }>;
   top: Array<{ event: string; count: number; users: number }>;
   feed: AnalyticsEvent[];
 }

@@ -191,6 +191,7 @@ export function AnalyticsView() {
                         <input type="checkbox" readOnly tabIndex={-1} checked={picked.includes(p.email)} />
                         {dot(p.env)}
                         <span className="an-email">{p.email}</span>
+                        <span className="muted small an-loc" title={p.location ? `Latest event from ${p.location}` : undefined}>{p.location ?? ""}</span>
                         <span className="muted mono small">{num(p.events)}</span>
                         <span className="muted mono small an-ago">{ago(p.lastSeen)}</span>
                       </button>
@@ -215,6 +216,7 @@ export function AnalyticsView() {
                     </button>
                     <span className={`an-what ${e.event === "$exception" || e.event === "$rageclick" ? "bad" : e.event.startsWith("$") ? "" : "custom"}`}>{what(e)}</span>
                     {e.event !== "$pageview" && e.path && <span className="muted small an-path">{e.path}</span>}
+                    {e.location && <span className="muted small an-loc an-ev-loc">{e.location}</span>}
                   </div>
                 ))}
                 {!snap.feed.length && <div className="muted small">No events in this range.</div>}
@@ -271,6 +273,12 @@ function EventDetail({ e, envName, onPerson, onClose }: { e: AnalyticsEvent; env
             <>
               <span>where</span>
               <span>{envName}</span>
+            </>
+          )}
+          {e.location && (
+            <>
+              <span>from</span>
+              <span>{e.location}</span>
             </>
           )}
           {e.path && (

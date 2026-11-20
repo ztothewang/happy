@@ -133,9 +133,9 @@ export class PostHog {
       const base = where.join(" AND ");
       const quiet = `event NOT IN (${NOISE.map(q).join(",")})`;
       const [people, top, feed] = await Promise.all([
-        this.hogql(`SELECT person.properties.email e, any(properties.$host), count(), max(timestamp) m FROM events WHERE ${everyone} GROUP BY e ORDER BY m DESC LIMIT 300`),
+        this.hogql(`SELECT person.properties.email e, any(properties.$host), count(), max(timestamp) m, ${GEO.map((g) => `argMax(properties.${g}, timestamp)`).join(", ")} FROM events WHERE ${everyone} GROUP BY e ORDER BY m DESC LIMIT 300`),
         this.hogql(`SELECT event, count() c, uniq(person_id) FROM events WHERE ${base} AND ${quiet} GROUP BY event ORDER BY c DESC LIMIT 40`),
-        this.hogql(`SELECT timestamp, event, person.properties.email, properties.$host, properties.$pathname, properties.$event_type, elements_chain_texts, uuid FROM events WHERE ${base} AND ${quiet} ORDER BY timestamp DESC LIMIT 300`),
+        this.hogql(`SELECT timestamp, event, person.properties.email, properties.$host, properties.$pathname, properties.$event_type, elements_chain_texts, uuid, ${GEO.map((g) => `properties.${g}`).join(", ")} FROM events WHERE ${base} AND ${quiet} ORDER BY timestamp DESC LIMIT 300`),
       ]);
       const perEnv = new Map<string, { users: number; events: number }>();
       for (const [h, u, c] of sites) {
@@ -154,9 +154,9 @@ export class PostHog {
         fetchedAt: Date.now(),
         link,
         envs,
-        people: (people as [string, string, number, string][]).map(([email, host, events, last]) => ({ email, env: envOf(host), events, lastSeen: Date.parse(last) })),
+        people: (people as unknown[][]).map(([email, host, events, last, ...geo]) => ({ email: email as string, env: envOf(host as string), events: events as number, lastSeen: Date.parse(last as string), location: place(geo) })),
         top: (top as [string, number, number][]).map(([event, count, users]) => ({ event, count, users })),
-        feed: (feed as [string, string, string | null, string, string | null, string | null, string[] | null, string][]).map(([ts, event, email, host, path, type, texts, id]) => ({
+        feed: (feed as [string, string, string | null, string, string | null, string | null, string[] | null, string, ...unknown[]][]).map(([ts, event, email, host, path, type, texts, id, ...geo]) => ({
           id,
           ts: Date.parse(ts),
           event,
@@ -164,6 +164,7 @@ export class PostHog {
           env: envOf(host),
           path: path || undefined,
           action: event === "$autocapture" ? [type ?? "click", texts?.find((t) => t.trim())].filter(Boolean).join(" ") : undefined,
+          location: place(geo),
         })),
       };
     } catch (e) {
@@ -189,4 +190,13 @@ export class PostHog {
       link: `${this.creds!.host}/project/${this.projectId()}/events/${id}/${encodeURIComponent(new Date(ts).toISOString())}`,
     };
   }
+}
+
+/** PostHog's GeoIP properties (from the visitor's IP): city, region code, country code, country name. */
+const GEO = ["$geoip_city_name", "$geoip_subdivision_1_code", "$geoip_country_code", "$geoip_country_name"];
+/** "Austin, TX" in the US, "London, GB" elsewhere, the country alone without a city. */
+function place([city, region, code, country]: unknown[]): string | undefined {
+  const s = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);
+  if (!s(city)) return s(country) ?? s(code);
+  return `${s(city)}, ${s(code) === "US" ? (s(region) ?? "US") : (s(code) ?? s(country) ?? "")}`.replace(/, $/, "");
 }
