@@ -217,7 +217,8 @@ export function MobileApp({ sessions }: { sessions: Record<string, SessionState>
     mail: inbox?.importantUnread ?? 0,
   };
   return (
-    <div className="mx-app">
+    // A narrow desktop window uses this layout too: leave room for the Mac's window buttons (a real phone doesn't need it).
+    <div className={`mx-app ${hub().isRemote ? "" : "mx-desktop"}`}>
       {screen ?? (
         <>
           <div className="mx-page">
