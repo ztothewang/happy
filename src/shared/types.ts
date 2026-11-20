@@ -242,6 +242,8 @@ export interface McpPackage {
   unpublished: boolean;
   /** Commits on main changing the MCP since its last version bump (changes that a publish wouldn't include). */
   unbumped: number;
+  /** Shell command that publishes main's copy of the package with your npm CLI (fresh fetch, clean temp export). */
+  publish?: string;
 }
 
 /** A scheduled routine in the Claude desktop app or the Codex app. */

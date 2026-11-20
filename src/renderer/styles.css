@@ -2061,3 +2061,4 @@ pre.code { position: relative; }
 .at-row.completed .at-ic { color: var(--ok); }
 .at-spin { animation: at-spin 1s linear infinite; color: var(--fg); }
 @keyframes at-spin { to { transform: rotate(360deg); } }
+.dp-publish { margin-left: 6px; font: 600 11.5px var(--f); color: var(--accent); }

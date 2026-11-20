@@ -152,6 +152,24 @@ function DeployButton({ tenant, commands, components }: { tenant: string; comman
   );
 }
 
+/** Publish main's copy of a package to npm with your own CLI, in a terminal you can watch (and type a one-time code into). */
+function PublishButton({ name, version, command }: { name: string; version: string; command: string }) {
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (!confirm(`Publish ${name}@${version} to npm?\n\nRuns on the Terminal page with your npm CLI and login. It publishes what's on main (a fresh copy, not your working folder).`)) return;
+    setBusy(true);
+    const termId = await runInTerminal(command, `publish ${name}@${version}`);
+    if (!termId) alert("All 4 terminals are busy. Free one up on the Terminal page, then publish again.");
+    else window.dispatchEvent(new CustomEvent("happy:open-terminal"));
+    setBusy(false);
+  };
+  return (
+    <button className="link-btn dp-publish" disabled={busy} onClick={() => void go()} title={command}>
+      publish
+    </button>
+  );
+}
+
 function DeployStrip({ d }: { d: DeployBoard }) {
   const jobs = useDeployJobs();
   /** Latest tracked deploy covering this tenant's component (full covers all three). */
@@ -232,7 +250,8 @@ function DeployStrip({ d }: { d: DeployBoard }) {
           {d.mcp.map((m) => (
             <span key={m.name} className={`dp-mcp-pkg ${m.unpublished ? "behind" : m.unbumped ? "warn" : "ok"}`} title={`${m.dir}: ${m.main} on main · ${m.npm ?? "?"} on npm${m.unbumped ? ` · ${num(m.unbumped)} change${m.unbumped === 1 ? "" : "s"} since the last version bump` : ""}`}>
               <b>{m.name}</b> {m.main}
-              {m.unpublished ? <em> · npm {m.npm} → publish</em> : m.unbumped ? <em> · {num(m.unbumped)} unbumped</em> : <em> ✓</em>}
+              {m.unpublished ? <em> · npm {m.npm ?? "none"}</em> : m.unbumped ? <em> · {num(m.unbumped)} unbumped</em> : <em> ✓</em>}
+              {m.unpublished && m.publish && <PublishButton name={m.name} version={m.main} command={m.publish} />}
             </span>
           ))}
         </div>

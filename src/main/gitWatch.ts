@@ -219,7 +219,7 @@ export class GitWatch {
       const bump = (await git(root, ["log", "-1", "--format=%H", "-G", '"version"', mainRef, "--", `${dir}/package.json`]).catch(() => "")) || (await git(root, ["log", "-1", "--format=%H", mainRef, "--", `${dir}/package.json`]).catch(() => ""));
       const unbumped = bump ? Number(await git(root, ["rev-list", "--count", `${bump}..${mainRef}`, "--", dir, `:!${dir}/package.json`, ...notShipped(dir)]).catch(() => "0")) || 0 : 0;
       const npm = await npmVersion(name);
-      out.push({ name, dir, main: version, npm, unpublished: newer(version, npm), unbumped });
+      out.push({ name, dir, main: version, npm, unpublished: newer(version, npm), unbumped, publish: publishCommand(root, mainRef, dir, name, version) });
     }
     return out;
   }
@@ -391,3 +391,24 @@ export class GitWatch {
 
 /** The path in a `git status --porcelain` line (the new name for a rename, unquoted). */
 export const porcelainPath = (line: string) => line.slice(3).replace(/^.* -> /, "").replace(/^"|"$/g, "");
+
+/**
+ * Publish exactly what's on main (not the local checkout, which may be dirty or on another branch): fetch, export the
+ * package folder from main into a temp dir, install from its lockfile, then npm publish (its prepare script builds).
+ * Stops if main's version changed since the board was read, so it never publishes a version you didn't see.
+ */
+export function publishCommand(root: string, mainRef: string, dir: string, name: string, version: string): string {
+  const sh = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+  const remote = mainRef.includes("/") ? mainRef.split("/")[0] : "";
+  return [
+    remote ? `git -C ${sh(root)} fetch -q ${sh(remote)}` : "true",
+    `V=$(git -C ${sh(root)} show ${sh(`${mainRef}:${dir}/package.json`)} | node -p 'JSON.parse(require("fs").readFileSync(0)).version')`,
+    `[ "$V" = ${sh(version)} ] || { echo "main is now at $V, not ${version}: refresh the board first"; false; }`,
+    `T=$(mktemp -d)`,
+    `git -C ${sh(root)} archive ${sh(mainRef)} ${sh(dir)} | tar -x -C "$T"`,
+    `cd "$T"/${sh(dir)}`,
+    `npm ci --no-audit --no-fund`,
+    `npm publish`,
+    `echo "published ${name}@${version}"`,
+  ].join(" && ") + `; S=$?; cd ~; [ -n "$T" ] && rm -rf "$T"; (exit $S)`;
+}
