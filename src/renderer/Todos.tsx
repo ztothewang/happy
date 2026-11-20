@@ -1,4 +1,4 @@
-import { Bell, Check, ListChecks, Plus, X } from "lucide-react";
+import { Bell, Check, Circle, ListChecks, LoaderCircle, Plus, X } from "lucide-react";
 import { num } from "./models";
 import { useState } from "react";
 import type { SessionState, SessionTodo } from "../shared/types";
@@ -124,7 +124,7 @@ function AddTodo({ s, autoFocus }: { s: SessionState; autoFocus?: boolean }) {
 }
 
 /** Reminders, follow-ups and the agent's own task list for one chat (desktop card and phone sheet). */
-export function TodoList({ s, autoFocus }: { s: SessionState; autoFocus?: boolean }) {
+export function TodoList({ s, autoFocus, hideAgent }: { s: SessionState; autoFocus?: boolean; /** Desktop shows the agent's tasks in the chat instead. */ hideAgent?: boolean }) {
   const [showDone, setShowDone] = useState(false);
   const todos = s.todos ?? [];
   const reminders = todos.filter((t) => t.kind === "reminder" && !t.done).sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity));
@@ -150,7 +150,7 @@ export function TodoList({ s, autoFocus }: { s: SessionState; autoFocus?: boolea
           ))}
         </div>
       )}
-      {agent.length > 0 && (agentOpen || !todos.length) && (
+      {!hideAgent && agent.length > 0 && (agentOpen || !todos.length) && (
         <div className="td-sec">
           <div className="td-h">{s.engine === "codex" ? "Codex" : s.engine === "cursor" ? "Cursor" : "Claude"}'s tasks</div>
           {agent.map((t, i) => (
@@ -192,7 +192,8 @@ export function TodoFloat({ s }: { s: SessionState }) {
     } catch {}
   };
   const mine = openTodos(s);
-  const agentOpen = (s.agentTodos ?? []).filter((t) => t.status !== "completed").length;
+  // The agent's own tasks show in the chat (AgentTasks), not here.
+  const agentOpen = 0;
   const overdue = mine.filter(isOverdue).length;
   const has = mine.length > 0 || agentOpen > 0;
   if (!adding && (!has || !open))
@@ -221,7 +222,7 @@ export function TodoFloat({ s }: { s: SessionState }) {
           <X size={12} />
         </button>
       </div>
-      <TodoList s={s} autoFocus={adding} />
+      <TodoList s={s} autoFocus={adding} hideAgent />
     </div>
   );
 }
@@ -298,6 +299,29 @@ export function QueuedMessages({ s, mobile }: { s: SessionState; mobile?: boolea
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** The agent's task list, in the chat under its latest messages while it works through it (like Claude's own UI). */
+export function AgentTasks({ s }: { s: SessionState }) {
+  const list = s.agentTodos ?? [];
+  const open = list.some((t) => t.status !== "completed");
+  if (!list.length || (!open && s.status !== "running")) return null;
+  return (
+    <div className="ln agent-tasks-ln">
+      <span className="ts" />
+      <span className="who" />
+      <div className="agent-tasks">
+        {list.map((t, i) => (
+          <div key={t.id ?? i} className={`at-row ${t.status}`}>
+            <span className="at-ic">
+              {t.status === "completed" ? <Check size={13} strokeWidth={2.5} /> : t.status === "in_progress" ? <LoaderCircle size={13} className="at-spin" /> : <Circle size={13} strokeDasharray="2.5 2.5" />}
+            </span>
+            <span className="at-text">{t.text}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

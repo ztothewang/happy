@@ -1,5 +1,5 @@
 import { Pin } from "lucide-react";
-import { QueuedMessages, TodoFloat } from "./Todos";
+import { AgentTasks, QueuedMessages, TodoFloat } from "./Todos";
 import { RoutineRunsFloat } from "./RoutineRuns";
 import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PermissionDecision, SessionState, TranscriptItem } from "../shared/types";
@@ -786,6 +786,7 @@ export function SessionView({
             <span className="working">working…</span>
           </div>
         )}
+        <AgentTasks s={s} />
         <QueuedMessages s={s} />
         <NextSteps s={s} />
       </div>
