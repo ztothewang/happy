@@ -2036,3 +2036,11 @@ pre.code { position: relative; }
 /* Analytics: where people are (PostHog GeoIP). */
 .an-loc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
 .an-ev-loc { margin-left: auto; padding-left: 8px; }
+
+/* Chat: tag toggles, top left (desktop). */
+.tag-bar { position: absolute; top: 8px; left: 14px; z-index: 6; display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 140px); padding: 2px; border-radius: 12px; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(6px); }
+.tag-chip { font: 11.5px var(--fm); height: 22px; padding: 0 8px; border-radius: 11px; border: 1px solid var(--div); background: transparent; color: var(--dim); cursor: pointer; }
+.tag-chip:hover { color: var(--fg); border-color: var(--dim2); }
+.tag-chip.on { color: var(--tag); border-color: color-mix(in srgb, var(--tag) 55%, transparent); background: color-mix(in srgb, var(--tag) 12%, transparent); }
+@media (max-width: 700px) { .tag-bar { display: none; } }
+@media (min-width: 701px) { .log.with-tagbar { padding-top: 40px; } }

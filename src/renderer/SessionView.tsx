@@ -15,6 +15,7 @@ import { NextSteps } from "./NextSteps";
 import { LinkCards, openLightbox } from "./Lightbox";
 import { stageLabel, workHeads } from "./Sidebar";
 import { useMenu } from "./Menu";
+import { useSettings } from "./settings";
 import { showChatStats, showItemStats, turnStatsFor, useShownStats } from "./turnStats";
 
 /** mcp__browser__navigate → browser.navigate */
@@ -174,6 +175,31 @@ function Line({ b, cwd, who, showTools, onSimplify, onPin, onWtf, onStatus, onTa
   return (
     <div data-item={b.it.id} className={b.it.pinned ? "pinned-item" : undefined} onContextMenu={onContextMenu}>
       <ItemLine it={b.it} who={who} openFile={(f) => pane.open({ kind: "file", path: f })} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} onTags={onTags} onReview={onReview} />
+    </div>
+  );
+}
+
+/** Top left of a chat: every tag, click to toggle (on ones filled). */
+function TagBar({ s }: { s: SessionState }) {
+  const defs = useSettings()?.tags ?? [];
+  const on = s.tags ?? [];
+  const all = [...new Set([...defs.map((t) => t.name), ...on])];
+  if (!all.length) return null;
+  return (
+    <div className="tag-bar">
+      {all.map((t) => {
+        const has = on.includes(t);
+        return (
+          <button
+            key={t}
+            className={`tag-chip ${has ? "on" : ""}`}
+            title={`${has ? "Remove" : "Add"} #${t}${defs.find((d) => d.name === t)?.description ? ` · ${defs.find((d) => d.name === t)!.description}` : ""}`}
+            onClick={() => void hub().setTags(s.id, has ? on.filter((x) => x !== t) : [...on, t])}
+          >
+            #{t}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -603,6 +629,7 @@ export function SessionView({
   return (
     <>
       <div className="log-wrap">
+      {!s.isManager && !s.isCloud && !s.isEmail && <TagBar s={s} />}
       <div className="chat-corner">
         {s.items.some((i) => i.pinned) && (
           <button className="td-pill" onClick={() => pane.open({ kind: "pins" })} title="Pinned messages (opens in the side pane)">
@@ -624,7 +651,7 @@ export function SessionView({
         {s.routineId && <RoutineRunsFloat s={s} />}
         {!s.isManager && !s.isCloud && !s.isEmail && <TodoFloat s={s} />}
       </div>
-      <div className={`log ${s.isManager || s.isCloud || s.isEmail ? "no-ts" : ""}`} ref={scroller} onScroll={onScroll}>
+      <div className={`log ${s.isManager || s.isCloud || s.isEmail ? "no-ts" : "with-tagbar"}`} ref={scroller} onScroll={onScroll}>
         {s.archived && (
           <div className="ln sys">
             <span className="ts" />
