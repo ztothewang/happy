@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { AutoItem, AutoStage, SessionState } from "../shared/types";
+import type { AutoItem, AutoStage, PipelineRole, SessionState } from "../shared/types";
 import { hub } from "./App";
 import { useAuto } from "./auto";
 import { useMenu } from "./Menu";
@@ -29,7 +29,7 @@ function line(i: AutoItem, s: SessionState): { text: string; warn?: boolean } {
 
 /**
  * The Auto page: chats you've put in the pipeline (left) and the three stages after them, CI/CD, Deploy and QA.
- * Stage 1: you move chats along by hand; the pipeline agents come next and will do it themselves.
+ * Happy wakes each agent when there's work for it; you can always move chats by hand too (card menu).
  */
 export function AutoView({ sessions, onOpen }: { sessions: Record<string, SessionState>; onOpen(id: string): void }) {
   const auto = useAuto();
@@ -37,6 +37,10 @@ export function AutoView({ sessions, onOpen }: { sessions: Record<string, Sessio
   const toast = useToast();
   const items = auto.items.filter((i) => sessions[i.sessionId]);
   const [sel, setSel] = useState<string | null>(null);
+  const [planNote, setPlanNote] = useState("");
+  const err = (e: unknown) => toast(String((e as Error).message).replace(/^Error invoking remote method '[^']+': (Error: )?/, ""));
+  const openAgent = (role: PipelineRole) => void hub().autoAgent(role).then(onOpen, err);
+  const env = auto.qaEnv ?? "test env";
   const selected = items.find((i) => i.sessionId === sel) ?? items.find((i) => i.events.length > 1);
   const move = (i: AutoItem, stage: AutoStage, note?: string) => void hub().autoMove(i.sessionId, stage, note).catch((e) => toast(String((e as Error).message)));
   const cardMenu = (e: React.MouseEvent, i: AutoItem) =>
@@ -48,30 +52,39 @@ export function AutoView({ sessions, onOpen }: { sessions: Record<string, Sessio
       { label: "Remove from Auto", danger: true, onSelect: () => void hub().autoRemove(i.sessionId) },
     ]);
   const inStages = (...st: AutoStage[]) => items.filter((i) => st.includes(i.stage));
+  const waitingMerge = inStages("merge").filter((i) => !i.mergeApproved);
   const needs = [
-    ...inStages("merge").map((i) => ({ i, text: `${sessions[i.sessionId].title} is ready to merge into main.`, acts: [["Approve merge", () => move(i, "deploy", "merged: waiting to deploy")], ["Send back", (e: React.MouseEvent) => cardMenu(e, i)]] as const })),
-    ...inStages("deploy").map((i) => ({ i, text: `${sessions[i.sessionId].title} is waiting to deploy.`, acts: [["Mark deployed", () => move(i, "qa", "deployed: QA on debreu")], ["Send back", (e: React.MouseEvent) => cardMenu(e, i)]] as const })),
+    ...waitingMerge.map((i) => ({ k: i.sessionId, text: `${sessions[i.sessionId].title} passed CI: merge into main?`, acts: [["Approve merge", () => void hub().autoApproveMerge([i.sessionId]).catch(err)], ["Send back", (e: React.MouseEvent) => cardMenu(e, i)]] as const })),
+    ...(auto.alerts ?? []).map((a) => ({ k: a.id, text: `${a.from}: ${a.text}`, acts: [["Open " + a.from, () => (["CI/CD", "Deploy", "QA"].includes(a.from) ? openAgent(a.from === "CI/CD" ? "ci" : a.from === "Deploy" ? "deploy" : "qa") : undefined)], ["Dismiss", () => void hub().autoDismissAlert(a.id)]] as const })),
   ];
+  const plan = auto.plan && !auto.plan.approved ? auto.plan : undefined;
   const sw = (on: boolean, text: string, set: () => void, title: string) => (
     <button className="au-tg" onClick={set} title={title} aria-pressed={on}>
       <span className={`au-sw ${on ? "on" : ""}`} />
       {text}
     </button>
   );
-  const agent = (name: string, what: string, stages: AutoStage[]) => {
+  const agent = (role: PipelineRole, name: string, what: string, stages: AutoStage[]) => {
     const list = inStages(...stages);
+    const id = auto.agents?.[role];
+    const a = id ? sessions[id] : undefined;
+    const st = !a ? { t: "not started", c: "dim" } : a.status === "running" ? { t: "working", c: "acc" } : a.status === "needs_permission" ? { t: "needs you", c: "you" } : a.status === "error" ? { t: "error", c: "bad" } : { t: "idle", c: "dim" };
+    // What it last did, from the timelines.
+    const last = items
+      .flatMap((i) => i.events.filter((e) => e.who === name).map((e) => ({ ...e, title: sessions[i.sessionId].title })))
+      .sort((x, y) => y.at - x.at)[0];
     return (
       <div className="au-col">
         <h3>
           <span>{name}</span>
           <span>{list.length || ""}</span>
         </h3>
-        <div className="au-agent">
+        <div className={`au-agent ${st.c === "you" ? "hot" : ""}`}>
           <div className="au-ah">
             {name}
-            <span className="au-chip c-dim">by hand</span>
+            <span className={`au-chip c-${st.c}`}>{st.t}</span>
           </div>
-          <div className="au-now">{what}</div>
+          <div className="au-now">{last ? `${fmtClock(last.at)} · ${last.title}: ${last.text}` : what}</div>
           {list.length > 0 && (
             <div className="au-q">
               {list.map((i) => (
@@ -82,6 +95,16 @@ export function AutoView({ sessions, onOpen }: { sessions: Record<string, Sessio
               ))}
             </div>
           )}
+          <div className="au-acts">
+            <button className="au-btn" onClick={() => openAgent(role)}>
+              Open
+            </button>
+            {a && (
+              <button className="au-btn" onClick={() => confirm(`Give ${name} a fresh conversation? Whatever it's in the middle of is re-sent from the saved state.`) && void hub().autoResetAgent(role).catch(err)}>
+                Reset
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -96,17 +119,40 @@ export function AutoView({ sessions, onOpen }: { sessions: Record<string, Sessio
         </span>
         <span className="au-tgs">
           {sw(auto.autoMerge, "Auto merge", () => void hub().autoSet({ autoMerge: !auto.autoMerge }), "Merge a passing CI batch into main without asking")}
-          {sw(auto.autoDeploy, "Auto deploy (debreu)", () => void hub().autoSet({ autoDeploy: !auto.autoDeploy }), "Deploy merged work to debreu without asking; other tenants, migrations, backfills and npm publish still ask")}
+          {sw(auto.autoDeploy, `Auto deploy (${env})`, () => void hub().autoSet({ autoDeploy: !auto.autoDeploy }), `Deploy merged code to ${env} without asking; other environments, migrations, backfills and package publishes still ask`)}
           <button className="au-btn" onClick={() => void hub().autoSet({ paused: !auto.paused })} title="Nothing new starts while paused; running steps finish">
             {auto.paused ? "Resume" : "Pause"}
           </button>
         </span>
       </div>
-      {needs.length > 0 && (
+      {(needs.length > 0 || plan) && (
         <div className="au-inbox">
           <span className="au-ih">Needs you</span>
+          {waitingMerge.length > 1 && (
+            <div className="au-ask">
+              <span className="au-askt">{waitingMerge.length} chats passed CI together.</span>
+              <button className="au-btn pri" onClick={() => void hub().autoApproveMerge().catch(err)}>
+                Approve all {waitingMerge.length}
+              </button>
+            </div>
+          )}
+          {plan && (
+            <div className="au-plan">
+              <div className="au-askt">Deploy plan, {fmtClock(plan.at)}:</div>
+              <pre>{plan.text}</pre>
+              <div className="au-ask">
+                <input id="au-plan-note" className="au-note" placeholder={`Note for Deploy (e.g. ${env} only, hold the backfill)`} value={planNote} onChange={(e) => setPlanNote(e.target.value)} />
+                <button className="au-btn pri" onClick={() => void hub().autoApprovePlan(planNote.trim() || undefined).then(() => setPlanNote(""), err)}>
+                  Approve plan
+                </button>
+                <button className="au-btn" onClick={() => openAgent("deploy")}>
+                  Open Deploy
+                </button>
+              </div>
+            </div>
+          )}
           {needs.map((n) => (
-            <div key={n.i.sessionId + n.i.stage} className="au-ask">
+            <div key={n.k} className="au-ask">
               <span className="au-askt">{n.text}</span>
               {n.acts.map(([t, run], k) => (
                 <button key={t} className={`au-btn ${k === 0 ? "pri" : ""}`} onClick={(e) => run(e)}>
@@ -153,9 +199,9 @@ export function AutoView({ sessions, onOpen }: { sessions: Record<string, Sessio
                 );
               })}
             </div>
-            {agent("CI/CD", "Merges ready branches onto main in one batch, runs the tests once, sends failures back. Agent coming next; move chats by hand for now.", ["queued", "ci", "merge"])}
-            {agent("Deploy", "Asks each chat what its deploy needs, plans it per tenant, waits for you.", ["deploy"])}
-            {agent("QA · debreu", "Asks each chat how to check its change on debreu, then tests it.", ["qa"])}
+            {agent("ci", "CI/CD", "Merges the ready branches onto main in one batch, runs the tests once, sends failures back.", ["queued", "ci", "merge"])}
+            {agent("deploy", "Deploy", "Asks each chat what its deploy needs, plans it, waits for your approval.", ["deploy"])}
+            {agent("qa", "QA", `Asks each chat how to check its change on ${env}, then tests it.`, ["qa"])}
           </div>
         )}
         {selected && (

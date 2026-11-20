@@ -23,6 +23,8 @@ import { draftReply, me, style, triage, who, draftNew } from "./assist.js";
 import { boardContext, isReadOnlyGcloud, tenantCloud } from "./cloud.js";
 import { gcloudStatus } from "./gcloudAuth.js";
 import { projectConfig } from "./projectConfig.js";
+import { ROLE_NAME, ROLE_STAGES, WORKER_PROMPT, pipelineToolServer, rolePrompt, wakeMessage, workerToolServer, type PipelineHost } from "./pipeline.js";
+import type { AutoItem, AutoStage, PipelineRole } from "../shared/types.js";
 import { checkPrompt, isCheckAnswer, parseCheck } from "./nextSteps.js";
 import { crossTenantGroups, landedOnMain, lastCommitSubject, projectErrors, tenantProjects } from "./overview.js";
 import { listProcesses, within } from "./processes.js";
@@ -281,6 +283,9 @@ export class Hub implements SessionHost {
       this.createSession({ engine: "claude", cwd: homedir(), title: "Manager" }, true);
     }
     this.startGitSweep();
+    // The Auto pipeline: wake agents for new work (and after a restart, tell the ones that were mid-step).
+    setInterval(() => this.pipelineTick(), 30_000);
+    setTimeout(() => this.pipelineResume(), 15_000);
     if (demo) {
       // Demo: each chat's state (next steps, a running turn) comes from the file.
       for (const s of this.sessions.values()) {
@@ -317,6 +322,8 @@ export class Hub implements SessionHost {
   // ── SessionHost ────────────────────────────────────────────────
   changed(session: Session) {
     this.emit.update(session.snapshot());
+    // A pipeline agent finishing a turn may have new work waiting.
+    if (session.meta.pipelineRole && session.status === "idle") setTimeout(() => this.pipelineTick(), 1000);
     this.scheduleSave();
     if (session.status !== "running") this.refreshGit(session);
     if (session.status === "idle") {
@@ -1468,11 +1475,28 @@ export class Hub implements SessionHost {
       s = new CursorSession(meta, items, this);
     } else {
       const browser = claudeBrowserServer(this.browsers, meta.id);
+      const role = meta.pipelineRole;
+      const worker = !isSystemSession(meta);
       s = new ClaudeSession(meta, items, this, {
-        mcpServers: meta.isManager ? { hub: this.managerToolServer(), browser } : meta.isEmail ? { mail: this.mailToolServer() } : { browser },
+        mcpServers: role
+          ? { pipeline: pipelineToolServer(role, this.pipelineHost()), ...(role === "qa" ? { browser } : {}) }
+          : meta.isManager
+            ? { hub: this.managerToolServer(), browser }
+            : meta.isEmail
+              ? { mail: this.mailToolServer() }
+              : { browser, pipeline: workerToolServer(meta.id, this.pipelineHost()) },
         alwaysAsk: meta.isEmail ? "mcp__mail__send_draft" : undefined,
-        appendSystemPrompt: meta.isManager ? MANAGER_PROMPT + BROWSER_PROMPT : meta.isEmail ? emailPrompt() : meta.isCloud || meta.cloudBoard ? CLOUD_PROMPT : BROWSER_PROMPT,
+        appendSystemPrompt: role
+          ? rolePrompt(role, this.pipelineContext()) + (role === "qa" ? BROWSER_PROMPT : "")
+          : meta.isManager
+            ? MANAGER_PROMPT + BROWSER_PROMPT
+            : meta.isEmail
+              ? emailPrompt()
+              : meta.isCloud || meta.cloudBoard
+                ? CLOUD_PROMPT
+                : BROWSER_PROMPT + (worker ? WORKER_PROMPT : ""),
         autoAllow: (t, input) =>
+          t.startsWith("mcp__pipeline__") ||
           (meta.isManager && t.startsWith("mcp__hub__")) ||
           // Mail chat: reading and acting on mail runs freely (sending asks through alwaysAsk below, in every mode).
           (!!meta.isEmail && t.startsWith("mcp__mail__")) ||
@@ -1920,24 +1944,26 @@ export class Hub implements SessionHost {
   }
 
   // ── groups ─────────────────────────────────────────────────────
-  // ── Auto pipeline (stage 1: chats in it and their stages, moved by hand) ──
+  // ── Auto pipeline: workers → CI/CD → Deploy → QA (see pipeline.ts) ──
   autoState() {
     // Chats that were deleted leave the pipeline.
     this.autoData.items = this.autoData.items.filter((i) => this.sessions.has(i.sessionId));
-    return this.autoData;
+    const cfg = projectConfig(settings().repo);
+    return { ...this.autoData, alerts: this.autoData.alerts ?? [], qaEnv: cfg.pipeline?.qaEnv ?? cfg.environments?.[0]?.id };
   }
   private autoChanged() {
     this.scheduleSave();
     this.emit.auto(this.autoState());
+    setTimeout(() => this.pipelineTick(), 0);
   }
-  private autoEvent(item: import("../shared/types.js").AutoItem, who: string, text: string, tone?: "ok" | "bad" | "you") {
+  private autoEvent(item: AutoItem, who: string, text: string, tone?: "ok" | "bad" | "you") {
     item.events = [...item.events, { at: Date.now(), who, text, tone }].slice(-200);
   }
   autoAdd(ids: string[]) {
     for (const id of ids) {
       const s = this.sessions.get(id);
       if (!s || isSystemSession(s.meta) || this.autoData.items.some((i) => i.sessionId === id)) continue;
-      const item = { sessionId: id, stage: "working" as const, addedAt: Date.now(), events: [] };
+      const item: AutoItem = { sessionId: id, stage: "working", addedAt: Date.now(), events: [] };
       this.autoEvent(item, "you", "added to Auto");
       this.autoData.items = [...this.autoData.items, item];
     }
@@ -1947,17 +1973,191 @@ export class Hub implements SessionHost {
     this.autoData.items = this.autoData.items.filter((i) => i.sessionId !== id);
     this.autoChanged();
   }
-  autoMove(id: string, stage: import("../shared/types.js").AutoStage, note?: string) {
+  /** You moving a chat by hand (no rules: you're the one who decides). */
+  autoMove(id: string, stage: AutoStage, note?: string) {
     const item = this.autoData.items.find((i) => i.sessionId === id);
     if (!item) throw new Error("That chat isn't in Auto");
-    const back = stage === "working" && item.stage !== "working";
-    this.autoEvent(item, "you", `moved to ${stage}${note ? `: ${note}` : ""}`, back ? "bad" : undefined);
-    Object.assign(item, { stage, note, back: back || undefined });
+    this.applyMove(item, "you", stage, note);
+    if (stage === "working" && note && item.events.length) void this.pipelineMessage(id, "You (via Auto)", note);
     this.autoChanged();
+  }
+  private applyMove(item: AutoItem, who: string, stage: AutoStage, note?: string) {
+    const back = stage === "working" && item.stage !== "working";
+    this.autoEvent(item, who, `moved to ${stage}${note ? `: ${note}` : ""}`, back ? "bad" : stage === "done" ? "ok" : undefined);
+    if (stage === "queued") item.queuedAt = Date.now();
+    if (stage === "working") item.mergeApproved = undefined;
+    Object.assign(item, { stage, note, back: back || undefined });
+  }
+  /** A move by a pipeline agent or a worker's ready_for_ci: only the moves that role may make. */
+  private agentMove(role: PipelineRole | "worker", chat: string, stage: AutoStage, note?: string): string | undefined {
+    const item = this.autoData.items.find((i) => i.sessionId === chat);
+    if (!item) return "That chat isn't in the pipeline.";
+    if (role === "worker") {
+      if (item.stage === "queued") return "Already in the CI queue.";
+      if (stage !== "queued" || item.stage !== "working") return `It's already past that (in ${item.stage}).`;
+    } else {
+      const mine = ROLE_STAGES[role];
+      if (!mine.includes(item.stage)) return `It's in ${item.stage}, not one of your stages (${mine.join(", ")}).`;
+      const allowed: Record<PipelineRole, AutoStage[]> = { ci: ["ci", "merge", "deploy", "working"], deploy: ["qa", "working"], qa: ["done", "working"] };
+      if (!allowed[role].includes(stage)) return `${ROLE_NAME[role]} can't move a chat to ${stage}.`;
+      if (role === "ci" && stage === "deploy" && !(item.mergeApproved || this.autoData.autoMerge)) return "Merging needs the user's approval (Auto merge is off): move it to merge and wait.";
+    }
+    this.applyMove(item, role === "worker" ? "worker" : ROLE_NAME[role], stage, note);
+    this.autoChanged();
+    return undefined;
   }
   autoSet(patch: Partial<Pick<import("../shared/types.js").AutoState, "autoMerge" | "autoDeploy" | "paused">>) {
     this.autoData = { ...this.autoData, ...patch };
     this.autoChanged();
+  }
+  autoApproveMerge(ids?: string[]) {
+    const items = this.autoData.items.filter((i) => i.stage === "merge" && (!ids || ids.includes(i.sessionId)));
+    if (!items.length) throw new Error("Nothing is waiting to merge");
+    for (const i of items) (i.mergeApproved = true), this.autoEvent(i, "you", "approved the merge", "you");
+    this.autoChanged();
+    void this.wakeAgent("ci", `The user approved merging:\n${items.map((i) => `- ${this.sessions.get(i.sessionId)?.meta.title} (chat ${i.sessionId})`).join("\n")}\nMerge them (step 6 of your instructions).`);
+  }
+  autoApprovePlan(note?: string) {
+    const plan = this.autoData.plan;
+    if (!plan || plan.approved) throw new Error("No plan is waiting");
+    plan.approved = true;
+    for (const i of this.autoData.items.filter((x) => x.stage === "deploy")) this.autoEvent(i, "you", `approved the deploy plan${note ? `: ${note}` : ""}`, "you");
+    this.autoChanged();
+    void this.wakeAgent("deploy", `The user approved your plan${note ? ` with this note: ${note}` : ""}. Run it (step 4 of your instructions).\n\nThe plan:\n${plan.text}`);
+  }
+  autoDismissAlert(id: string) {
+    this.autoData.alerts = (this.autoData.alerts ?? []).filter((a) => a.id !== id);
+    this.autoChanged();
+  }
+  /** A pipeline agent's chat: the one it has, or a new one in the main repo. */
+  pipelineAgent(role: PipelineRole): Session {
+    const known = this.autoData.agents?.[role];
+    const have = (known && this.sessions.get(known)) || [...this.sessions.values()].find((x) => x.meta.pipelineRole === role);
+    if (have) return have;
+    const s = this.createSession({ engine: "claude", cwd: settings().repo || homedir(), title: ROLE_NAME[role] }, false, { pipelineRole: role, titleSource: "user", permissionMode: "bypassPermissions" });
+    this.autoData.agents = { ...this.autoData.agents, [role]: s.meta.id };
+    this.scheduleSave();
+    return s;
+  }
+  autoAgent(role: PipelineRole) {
+    return this.pipelineAgent(role).meta.id;
+  }
+  autoResetAgent(role: PipelineRole) {
+    const s = this.newSystemChat(this.pipelineAgent(role).meta.id);
+    // Whatever it was doing gets re-sent from the saved state.
+    const items = this.autoData.items.filter((i) => ROLE_STAGES[role].includes(i.stage) && i.woke === i.stage);
+    if (items.length) void this.wakeAgent(role, wakeMessage(role, items.map((i) => this.pipelineView(i)), this.autoState(), true));
+    return s.meta.id;
+  }
+  private async wakeAgent(role: PipelineRole, message: string) {
+    if (this.autoData.paused || demo) return; // demo mode never starts agents
+    const s = this.pipelineAgent(role);
+    await s.post(message);
+  }
+  private pipelineMessage(chat: string, from: string, text: string) {
+    return this.get(chat).post(`**${from}** (Happy pipeline): ${text}`);
+  }
+  /** Wake each agent for the items newly in its stages (CI waits up to 2 minutes to batch). Happy's only automatic step. */
+  private pipelineTick() {
+    if (this.autoData.paused) return;
+    const now = Date.now();
+    for (const role of ["ci", "deploy", "qa"] as PipelineRole[]) {
+      const stage: AutoStage = role === "ci" ? "queued" : role;
+      const fresh = this.autoData.items.filter((i) => i.stage === stage && i.woke !== stage);
+      if (!fresh.length) continue;
+      const agentId = this.autoData.agents?.[role];
+      const agent = agentId ? this.sessions.get(agentId) : undefined;
+      if (agent && agent.status !== "idle") continue; // it picks these up when it's done
+      if (role === "ci") {
+        // A batch starts 2 minutes after its first chat was ready, so others finishing around then join it.
+        const oldest = Math.min(...fresh.map((i) => i.queuedAt ?? now));
+        if (now - oldest < 2 * 60_000) continue;
+      }
+      for (const i of fresh) i.woke = stage;
+      this.scheduleSave();
+      this.emit.auto(this.autoState());
+      void this.wakeAgent(role, wakeMessage(role, fresh.map((i) => this.pipelineView(i)), this.autoState()));
+    }
+  }
+  /** After a restart: each agent that was mid-step is told so (Deploy never re-runs a step on its own). */
+  private pipelineResume() {
+    if (this.autoData.paused) return;
+    for (const role of ["ci", "deploy", "qa"] as PipelineRole[]) {
+      const items = this.autoData.items.filter((i) => ROLE_STAGES[role].includes(i.stage) && i.woke === i.stage && i.stage !== "merge");
+      if (!items.length) continue;
+      if (role === "deploy") this.pipelineAlert("Happy", "Happy restarted while Deploy was working. It's checking where the deploy got to; nothing is re-run on its own.");
+      void this.wakeAgent(role, wakeMessage(role, items.map((i) => this.pipelineView(i)), this.autoState(), true));
+    }
+  }
+  private pipelineAlert(from: string, text: string) {
+    this.autoData.alerts = [...(this.autoData.alerts ?? []), { id: randomUUID(), from, text, at: Date.now() }].slice(-30);
+    this.autoChanged();
+  }
+  private pipelineView(i: AutoItem) {
+    const s = this.sessions.get(i.sessionId)!;
+    const g = s.meta.git;
+    return {
+      chat: i.sessionId,
+      title: s.meta.title,
+      stage: i.stage,
+      note: i.note,
+      summary: i.summary,
+      engine: s.meta.engine,
+      status: s.status,
+      folder: s.meta.cwd,
+      branch: s.meta.worktree?.branch ?? g?.branch,
+      ownWorktree: !!s.meta.worktree && !s.meta.worktree.removed,
+      uncommitted: g?.dirty,
+      commitsNotOnMain: g?.ahead,
+      merged: g?.merged,
+      mergeApproved: i.mergeApproved,
+      recent: i.events.slice(-6).map((e) => `${new Date(e.at).toISOString()} ${e.who}: ${e.text}`),
+    };
+  }
+  private pipelineContext() {
+    const repo = settings().repo || homedir();
+    const cfg = projectConfig(repo);
+    const hook = existsSync(join(repo, "githooks/pre-commit")) ? "githooks/pre-commit" : existsSync(join(repo, ".git/hooks/pre-commit")) ? ".git/hooks/pre-commit" : "";
+    const testCommand = cfg.pipeline?.testCommand ?? (hook ? `the repo's pre-commit checks (${hook}; run it directly on the integration branch with everything changed since main staged, or run the suites it runs)` : "the test suites described in the repo's AGENTS.md / CLAUDE.md");
+    const envs = (cfg.environments ?? []).map((e) => e.id).join(", ");
+    const deployCommands = cfg.deploy?.commands ? `${JSON.stringify(cfg.deploy.commands)} (placeholders {env} {envFile} {tag}; environments: ${envs || "?"}; run them in ${repo})` : "";
+    return { repo, qaEnv: cfg.pipeline?.qaEnv ?? cfg.environments?.[0]?.id, testCommand, deployCommands };
+  }
+  private pipelineHostCache?: PipelineHost;
+  private pipelineHost(): PipelineHost {
+    return (this.pipelineHostCache ??= {
+      state: () => this.autoState(),
+      view: (i) => this.pipelineView(i),
+      move: (role, chat, stage, note) => this.agentMove(role, chat, stage, note),
+      log: (chat, who, text, tone) => {
+        const item = this.autoData.items.find((i) => i.sessionId === chat);
+        if (!item) return;
+        this.autoEvent(item, who, text, tone);
+        this.scheduleSave();
+        this.emit.auto(this.autoState());
+      },
+      message: (chat, from, text) => this.pipelineMessage(chat, from, text),
+      ask: (chat, question) => this.get(chat).askHidden(question, 180_000),
+      alert: (from, text) => this.pipelineAlert(from, text),
+      setPlan: (text) => {
+        this.autoData.plan = { text, at: Date.now() };
+        for (const i of this.autoData.items.filter((x) => x.stage === "deploy")) this.autoEvent(i, "Deploy", "plan ready: waiting for your approval");
+        this.autoChanged();
+      },
+      readiness: async (chat) => {
+        const s = this.get(chat);
+        if (!s.meta.worktree || s.meta.worktree.removed) return "this chat works in the main checkout; CI needs its own branch (ask the user to move it to a worktree)";
+        const dirty = await dirtyPaths(s.meta.cwd);
+        if (dirty.length) return `commit first: ${dirty.length} uncommitted file${dirty.length === 1 ? "" : "s"} (${dirty.slice(0, 3).join(", ")})`;
+        const main = await this.gitWatch.mainName(s.meta.cwd).catch(() => "main");
+        const r = await pushIfAhead(s.meta.cwd, s.meta.worktree.branch, main);
+        if (r.error) return `couldn't push the branch: ${r.error}`;
+        return undefined;
+      },
+      repo: () => settings().repo || homedir(),
+      testCommand: () => this.pipelineContext().testCommand,
+      deployCommands: () => this.pipelineContext().deployCommands,
+    });
   }
 
   groups(): SessionGroup[] {

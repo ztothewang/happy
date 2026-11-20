@@ -34,6 +34,8 @@ export interface SessionMeta {
   cursorMode?: CursorMode;
   /** The chat this one was forked from (listed under it in the sidebar). */
   forkedFrom?: string;
+  /** One of the Auto pipeline's agents (CI/CD, Deploy, QA): hidden from the sidebar, opened from the Auto page. */
+  pipelineRole?: "ci" | "deploy" | "qa";
   /** Sidebar group (undefined = ungrouped). */
   groupId?: string;
   /** A routine's chat (Claude or Codex app routine id, e.g. "claude:sync-prod-prompts"): shows one run at a time. */
@@ -138,6 +140,8 @@ export interface ProjectConfig {
      */
     commands?: Record<string, string>;
   };
+  /** The Auto pipeline: where QA tests (default: the first environment) and the command CI runs (default: the repo's pre-commit hook). */
+  pipeline?: { qaEnv?: string; testCommand?: string };
   /** npm packages published from folders in the repo (version on main vs npm, unbumped changes). */
   packages?: Array<{ dir: string }>;
   /** Abbreviations to expand in chat titles ("acme" → "Acme Corp"); environment names are included automatically. */
@@ -873,6 +877,20 @@ export interface AutoItem {
   back?: boolean;
   addedAt: number;
   events: AutoEvent[];
+  /** The worker's summary when it said it was ready. */
+  summary?: string;
+  queuedAt?: number;
+  /** You approved the merge (or Auto merge was on when it passed). */
+  mergeApproved?: boolean;
+  /** The stage whose agent was last woken for this item (so each stage wakes its agent once). */
+  woke?: AutoStage;
+}
+export type PipelineRole = "ci" | "deploy" | "qa";
+export interface AutoAlert {
+  id: string;
+  from: string;
+  text: string;
+  at: number;
 }
 /** The Auto page: chats in the pipeline (workers → CI/CD → Deploy → QA) and its switches. */
 export interface AutoState {
@@ -881,6 +899,14 @@ export interface AutoState {
   /** Deploy to debreu without asking (other tenants and data steps still ask). */
   autoDeploy: boolean;
   paused: boolean;
+  /** The pipeline agents' chats (created on first use). */
+  agents?: Partial<Record<PipelineRole, string>>;
+  /** Things an agent needs you for. */
+  alerts?: AutoAlert[];
+  /** Deploy's plan, waiting for your approval (or approved). */
+  plan?: { text: string; at: number; approved?: boolean };
+  /** The environment QA tests on (and Auto deploy covers). */
+  qaEnv?: string;
 }
 
 export interface SessionGroup {
@@ -1211,6 +1237,14 @@ export interface HubApi {
   /** Move a chat to a stage by hand (stage 1 of the pipeline: the agents come next). */
   autoMove(id: string, stage: AutoStage, note?: string): Promise<void>;
   autoSet(patch: Partial<Pick<AutoState, "autoMerge" | "autoDeploy" | "paused">>): Promise<void>;
+  /** Approve the merge of items waiting in "merge" (all of them, or these). */
+  autoApproveMerge(ids?: string[]): Promise<void>;
+  /** Approve Deploy's plan (optionally with a note, e.g. which environments). */
+  autoApprovePlan(note?: string): Promise<void>;
+  autoDismissAlert(id: string): Promise<void>;
+  /** The agent's chat (created if needed), to open it. */
+  autoAgent(role: PipelineRole): Promise<string>;
+  autoResetAgent(role: PipelineRole): Promise<void>;
   onAuto(cb: (a: AutoState) => void): () => void;
   interrupt(id: string): Promise<void>;
   remove(id: string): Promise<void>;
@@ -1407,4 +1441,4 @@ export interface HubApi {
 /** Idle between turns but something it started is still going (a background task or a process in its folder). */
 export const inBackground = (s: { status: SessionStatus; processes?: unknown[]; preparing?: boolean }) => s.status === "idle" && !s.preparing && !!s.processes?.length;
 
-export const isSystemSession = (m: { isManager?: boolean; isCloud?: boolean; isEmail?: boolean }) => !!(m.isManager || m.isCloud || m.isEmail);
+export const isSystemSession = (m: { isManager?: boolean; isCloud?: boolean; isEmail?: boolean; pipelineRole?: string }) => !!(m.isManager || m.isCloud || m.isEmail || m.pipelineRole);
