@@ -31,6 +31,17 @@ export function sessionMenuItems(opts: {
   const toggleTag = (t: string) => hub().setTags(s.id, tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t]);
 
   const items: MenuItem[] = [{ label: "Rename", key: "r", onSelect: opts.onRename }];
+  // A chat started from a Linear ticket: have its agent wrap the ticket up (comment + close), in the chat where you can see it.
+  if (s.linearIssue && !s.isManager) {
+    items.push({
+      label: `Close ticket ${s.linearIssue}`,
+      hint: "agent comments + closes",
+      onSelect: () => {
+        void hub().send(s.id, closeTicketPrompt(s.linearIssue!));
+        opts.toast(`Asked the agent to close ${s.linearIssue}`);
+      },
+    });
+  }
   if (!s.isManager) {
     items.push(
       {
@@ -116,3 +127,8 @@ export function sessionMenuItems(opts: {
   }
   return items;
 }
+
+/** What the "Close ticket" action sends to the chat's agent. */
+export const closeTicketPrompt = (issue: string) =>
+  `Close Linear issue ${issue}. First post a comment on it summarizing the outcome: what was changed and why, the commits or PR (and whether it's merged and deployed), how it was verified, and anything left open or worth knowing. ` +
+  `Then move it to Done (or Canceled if the work was dropped, saying why in the comment). Use your Linear tools; if you don't have any, tell me instead of skipping it. Reply with the comment you posted.`;
