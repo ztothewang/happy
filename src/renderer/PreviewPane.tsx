@@ -127,7 +127,33 @@ export function PreviewPane(props: {
         </div>
       </div>
       <div className="pane-body">
-        {!active && <div className="muted pad center">Click a file, image or link in the transcript to preview it here.</div>}
+        {!active && (
+          <div className="pane-empty">
+            <div className="pane-empty-btns">
+              <button onClick={() => pane.open({ kind: "browser" })}>
+                <span>◎</span> Browser
+              </button>
+              <button onClick={() => pane.open({ kind: "terminal" })}>
+                <span>›_</span> Terminal
+              </button>
+              <button onClick={() => pane.open({ kind: "files" })}>
+                <span>▤</span> Files
+              </button>
+              <button onClick={() => pane.open({ kind: "changes" })}>
+                <span>±</span> Changes
+              </button>
+              <button
+                onClick={async () => {
+                  const p = await hub().pickFile(props.cwd);
+                  if (p) pane.openLink(p);
+                }}
+              >
+                <span>＋</span> Open a file
+              </button>
+            </div>
+            <div className="muted small">Or click a file, image or link in the chat to preview it here.</div>
+          </div>
+        )}
         {active?.kind === "browser" && (
           <BrowserView sessionId={props.sessionId} state={props.browser} hidden={props.hideNative} />
         )}

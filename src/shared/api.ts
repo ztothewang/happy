@@ -77,6 +77,7 @@ export function makeApi(invoke: Invoke, listen: Listen, extras: { pathForFile(fi
   browserEdit: (id, action, x, y) => invoke("browser:edit", id, action, x, y),
   onBrowserActivity: (cb) => listen("browser:activity", cb),
   simplify: (sessionId, itemId) => invoke("hub:simplify", sessionId, itemId),
+  checkTags: (sessionId) => invoke("hub:checkTags", sessionId),
   gcloudStatus: () => invoke("gcloud:status"),
   cloud: (refresh) => invoke("hub:cloud", refresh),
   analytics: (q) => invoke("hub:analytics", q),

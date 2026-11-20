@@ -1721,6 +1721,32 @@ export class Hub implements SessionHost {
   }
 
   /** Display-only plain-language rewrite of one reply; the agent's context is untouched. */
+  /**
+   * You asked (the "tags" button): the agent checks every tag that has a description against the chat, out of sight.
+   * Changes show in the chat as usual; returns them (empty = nothing to change).
+   */
+  async checkTags(sessionId: string): Promise<{ add: string[]; remove: string[] }> {
+    const s = this.get(sessionId);
+    if (s.status !== "idle" || s.queued.length) throw new Error("Wait for the reply to finish");
+    if (this.suggesting.has(s.id)) throw new Error("A tag check is already running");
+    const tags = settings().tags.filter((t) => t.description.trim()).map((t) => ({ ...t, auto: true }));
+    if (!tags.length) throw new Error("No tags with descriptions (Settings → Chats)");
+    const before = s.meta.tags ?? [];
+    this.suggesting.add(s.id);
+    try {
+      const answer = await s.askHidden(checkPrompt({ nextSteps: false, tags, current: before })!);
+      const r = parseCheck(answer, tags, before);
+      if (!r) throw new Error(answer ? "Couldn't read the agent's answer" : "No answer (the agent was busy or timed out)");
+      if (r.add.length || r.remove.length) {
+        this.setTags(s.id, [...before.filter((t) => !r.remove.includes(t)), ...r.add]);
+        s.noteTags(r.add, r.remove);
+      }
+      return { add: r.add, remove: r.remove };
+    } finally {
+      this.suggesting.delete(s.id);
+    }
+  }
+
   async simplify(sessionId: string, itemId: string) {
     const s = this.get(sessionId);
     const it = s.items.find((i) => i.id === itemId);

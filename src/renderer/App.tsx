@@ -145,7 +145,7 @@ function Shell() {
         const tab = toTab(input);
         const exists = p.tabs.some((t) => t.key === tab.key);
         const tabs = exists ? p.tabs.map((t) => (t.key === tab.key ? tab : t)) : [...p.tabs, tab];
-        return { open: true, tabs, active: focus || !p.active ? tab.key : p.active };
+        return { ...p, open: true, tabs, active: focus || !p.active ? tab.key : p.active };
       }),
     [updatePane],
   );

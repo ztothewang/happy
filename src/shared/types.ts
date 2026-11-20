@@ -1222,6 +1222,8 @@ export interface HubApi {
   browserEdit(sessionId: string, action: BrowserEdit, x?: number, y?: number): Promise<void>;
   onBrowserActivity(cb: (sessionId: string) => void): () => void;
   simplify(sessionId: string, itemId: string): Promise<void>;
+  /** Ask the agent, out of sight, whether the chat's tags should change; changes show in the chat. */
+  checkTags(sessionId: string): Promise<{ add: string[]; remove: string[] }>;
   gcloudStatus(): Promise<GcloudStatus>;
   cloud(refresh?: boolean): Promise<CloudSnapshot | null>;
   /** Start the Manager or Cloud chat over (fresh conversation, same settings). */
