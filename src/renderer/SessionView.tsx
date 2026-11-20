@@ -16,6 +16,7 @@ import { LinkCards, openLightbox } from "./Lightbox";
 import { stageLabel, workHeads } from "./Sidebar";
 import { useMenu } from "./Menu";
 import { useSettings } from "./settings";
+import { closeTicketPrompt } from "./sessionMenu";
 import { showChatStats, showItemStats, turnStatsFor, useShownStats } from "./turnStats";
 
 /** mcp__browser__navigate → browser.navigate */
@@ -169,12 +170,12 @@ function ToolBlock({ items, cwd, showAll }: { items: TranscriptItem[]; cwd: stri
   );
 }
 
-function Line({ b, cwd, who, showTools, onSimplify, onPin, onWtf, onStatus, onTags, onReview, onContextMenu }: { b: Block; cwd: string; who: string; showTools: boolean; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void; onTags?(): Promise<void>; onReview?(): void; onContextMenu?(e: React.MouseEvent): void }) {
+function Line({ b, cwd, who, showTools, onSimplify, onPin, onWtf, onStatus, onTags, onReview, onCloseTicket, onContextMenu }: { b: Block; cwd: string; who: string; showTools: boolean; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void; onTags?(): Promise<void>; onReview?(): void; onCloseTicket?(): void; onContextMenu?(e: React.MouseEvent): void }) {
   const pane = usePane();
   if (b.kind === "tools") return <ToolBlock items={b.items} cwd={cwd} showAll={showTools} />;
   return (
     <div data-item={b.it.id} className={b.it.pinned ? "pinned-item" : undefined} onContextMenu={onContextMenu}>
-      <ItemLine it={b.it} who={who} openFile={(f) => pane.open({ kind: "file", path: f })} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} onTags={onTags} onReview={onReview} />
+      <ItemLine it={b.it} who={who} openFile={(f) => pane.open({ kind: "file", path: f })} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} onTags={onTags} onReview={onReview} onCloseTicket={onCloseTicket} />
     </div>
   );
 }
@@ -258,7 +259,7 @@ function CopyBtn({ text }: { text: string }) {
 }
 
 /** Assistant reply with an optional plain-language rewrite (shown by default once made) and a toggle. */
-function AssistantBody({ it, onSimplify, onPin, onWtf, onStatus, onTags, onReview }: { it: TranscriptItem; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void; onTags?(): Promise<void>; onReview?(): void }) {
+function AssistantBody({ it, onSimplify, onPin, onWtf, onStatus, onTags, onReview, onCloseTicket }: { it: TranscriptItem; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void; onTags?(): Promise<void>; onReview?(): void; onCloseTicket?(): void }) {
   const [showOriginal, setShowOriginal] = useState(false);
   const [tagging, setTagging] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -307,6 +308,11 @@ function AssistantBody({ it, onSimplify, onPin, onWtf, onStatus, onTags, onRevie
           review
         </button>
       )}
+      {onCloseTicket && (
+        <button className="simplify" onClick={onCloseTicket} title="Ask the agent to comment on the Linear ticket with the outcome and close it">
+          close ticket
+        </button>
+      )}
       {onTags && (
         <button
           className="simplify"
@@ -341,6 +347,7 @@ const ItemLine = memo(function ItemLine({
   onStatus,
   onTags,
   onReview,
+  onCloseTicket,
 }: {
   it: TranscriptItem;
   who: string;
@@ -351,6 +358,7 @@ const ItemLine = memo(function ItemLine({
   onStatus?(): void;
   onTags?(): Promise<void>;
   onReview?(): void;
+  onCloseTicket?(): void;
 }) {
   const ts = <span className="ts">{fmtClock(it.ts)}</span>;
   switch (it.kind) {
@@ -382,7 +390,7 @@ const ItemLine = memo(function ItemLine({
           {ts}
           <span className="who">{who}</span>
           <div className="body">
-            <AssistantBody it={it} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} onTags={onTags} onReview={onReview} />
+            <AssistantBody it={it} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} onTags={onTags} onReview={onReview} onCloseTicket={onCloseTicket} />
           </div>
         </div>
       );
@@ -682,6 +690,7 @@ export function SessionView({
             onPin={b.kind === "item" && (b.it.kind === "assistant" || b.it.kind === "user") ? (v) => void hub().pinItem(s.id, b.it.id, v) : undefined}
             onWtf={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, WTF_PROMPT) : undefined}
             onStatus={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, STATUS_PROMPT) : undefined}
+            onCloseTicket={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId && s.linearIssue ? () => void hub().send(s.id, closeTicketPrompt(s.linearIssue!)) : undefined}
             onReview={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, REVIEW_PROMPT) : undefined}
             onTags={
               b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId

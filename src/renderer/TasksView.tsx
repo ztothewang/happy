@@ -7,8 +7,6 @@ import { relTime, num } from "./models";
 import { ResizeHandle, usePanelWidth } from "./resize";
 import { useSettings } from "./settings";
 import { useToast } from "./toast";
-import { closeTicketPrompt } from "./sessionMenu";
-import { useMenu } from "./Menu";
 
 const SCOPE_KEY = "happy.tasks.scope";
 const STATUS_KEY = "happy.tasks.statuses";
@@ -391,25 +389,11 @@ function IssuePanel({ issue, sessions, engine, onEngine, onStart, onOpen, onClos
         {sessions.length > 0 && (
           <div className="tk-sessions">
             {sessions.map((s) => (
-              <div key={s.id} className="tk-sess-row">
-                <button className="tk-sess" onClick={() => onOpen(s.id)}>
-                  <span className={`st ${s.status}`}>{s.preparing ? "setting up" : STATUS_WORD[s.status] ?? s.status}</span>
-                  <span>{s.engine}</span>
-                  <span className="muted">{relTime(s.updatedAt)}</span>
-                </button>
-                {!s.archived && (
-                  <button
-                    className="tk-close-t"
-                    title="Ask this chat's agent to comment on the ticket with the outcome and close it"
-                    onClick={() => {
-                      void hub().send(s.id, closeTicketPrompt(issue.identifier));
-                      toast(`Asked the agent to close ${issue.identifier}`, { label: "open chat", run: () => onOpen(s.id) });
-                    }}
-                  >
-                    close ticket
-                  </button>
-                )}
-              </div>
+              <button key={s.id} className="tk-sess" onClick={() => onOpen(s.id)}>
+                <span className={`st ${s.status}`}>{s.preparing ? "setting up" : STATUS_WORD[s.status] ?? s.status}</span>
+                <span>{s.engine}</span>
+                <span className="muted">{relTime(s.updatedAt)}</span>
+              </button>
             ))}
           </div>
         )}
@@ -551,7 +535,6 @@ function CreatePanel({ initial, width, onClose, onCreated }: { initial?: LinearI
 /** Tasks: open Linear issues, sortable, expandable, one click to hand one to an agent. */
 export function TasksView({ sessions, onOpen }: { sessions: Record<string, SessionState>; onOpen(id: string): void }) {
   const toast = useToast();
-  const menu = useMenu();
   const [status, setStatus] = useState<LinearStatus | null>(null);
   const [scope, setScope] = useState<TaskScope>(() => load(SCOPE_KEY, "mine"));
   const { picks, setPicks, shown } = useStatusFilter();
@@ -737,24 +720,7 @@ export function TasksView({ sessions, onOpen }: { sessions: Record<string, Sessi
                       <td className="muted mono">{relTime(i.updatedAt)}</td>
                       <td onClick={(e) => e.stopPropagation()}>
                         {live ? (
-                          <button
-                            className="tk-agent"
-                            onClick={() => onOpen(live.id)}
-                            onContextMenu={(e) =>
-                              menu.atMouse(e, [
-                                { label: "Open chat", onSelect: () => onOpen(live.id) },
-                                {
-                                  label: `Close ticket ${i.identifier}`,
-                                  hint: "agent comments + closes",
-                                  onSelect: () => {
-                                    void hub().send(live.id, closeTicketPrompt(i.identifier));
-                                    toast(`Asked the agent to close ${i.identifier}`);
-                                  },
-                                },
-                              ])
-                            }
-                            title="Open the agent's session (right-click: close ticket)"
-                          >
+                          <button className="tk-agent" onClick={() => onOpen(live.id)} title="Open the agent's session">
                             <span className={`st ${live.status}`}>{live.preparing ? "setting up" : STATUS_WORD[live.status] ?? live.status}</span> {live.engine}
                           </button>
                         ) : (
