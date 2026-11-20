@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Grid2x2, Maximize2, Plus, X } from "lucide-react";
+import { Grid2x2, Maximize2, PanelRight, Plus, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SessionGroup, SessionState } from "../shared/types";
 import { isSystemSession } from "../shared/types";
@@ -35,10 +35,6 @@ export function ChatWallView({ sessions, groups, onOpen, onGrid }: { sessions: S
   ]
     .filter((x) => x.members.length)
     .map((x) => ({ ...x, members: [...x.members].sort((a, b) => lastMessageAt(b) - lastMessageAt(a)) }));
-  // The modal steps through the cards in the order they're shown.
-  const order = sections.flatMap((x) => x.members);
-  const [peek, setPeek] = useState<string | null>(null);
-  const peeked = order.find((s) => s.id === peek);
   return (
     <div className="chatwall">
       <div className="ac-bar">
@@ -69,7 +65,7 @@ export function ChatWallView({ sessions, groups, onOpen, onGrid }: { sessions: S
                   const m = latest(s);
                   const on = picked.includes(s.id);
                   return (
-                    <div key={s.id} className={`ac-card ${on ? "on" : ""}`} onClick={() => setPeek(s.id)}>
+                    <div key={s.id} className={`ac-card ${on ? "on" : ""}`} onClick={() => onOpen(s.id)}>
                       <div className="ac-card-h">
                         <button
                           className={`ac-check ${on ? "on" : ""}`}
@@ -94,73 +90,60 @@ export function ChatWallView({ sessions, groups, onOpen, onGrid }: { sessions: S
         ))}
         {!sections.length && <div className="muted pad center">No active chats.</div>}
       </div>
-      {peeked && <ChatPeek s={peeked} order={order} onPeek={setPeek} onOpen={onOpen} />}
     </div>
   );
 }
 
-/** One chat from the wall in a modal: the live chat (scroll, reply), with ⌥↑/⌥↓ (or ↑/↓ outside the composer) to step through the wall. */
-function ChatPeek({ s, order, onPeek, onOpen }: { s: SessionState; order: SessionState[]; onPeek(id: string | null): void; onOpen(id: string): void }) {
+/**
+ * A chat opened from the Wall, Grid or Auto page: nearly full screen, the live chat with its own side pane (browser,
+ * terminal, files…). Esc closes (an empty composer, or outside it); "Open in list" leaves for the normal view.
+ */
+export function ChatModal({ s, pane, onClose, onOpenInList, onTogglePane, paneOpen }: { s: SessionState; pane?: React.ReactNode; onClose(): void; onOpenInList(): void; onTogglePane(): void; paneOpen: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
-  const picked = useGrid();
-  const i = order.findIndex((x) => x.id === s.id);
   useEffect(() => viewing.add(s.id), [s.id]);
-  const step = (d: number) => order.length && onPeek(order[(i + d + order.length) % order.length].id);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
       const el = document.activeElement as HTMLElement | null;
       const typing = !!el?.closest?.("textarea, input, [contenteditable]");
-      if (e.key === "Escape") {
-        // Esc in the composer still stops a running agent; an empty composer lets it close the modal.
-        const empty = !typing || (el instanceof HTMLTextAreaElement && !el.value);
-        if (empty && !(typing && s.status === "running")) (e.preventDefault(), onPeek(null));
-      } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && (e.altKey || !typing)) {
-        e.preventDefault();
-        step(e.key === "ArrowDown" ? 1 : -1);
-      }
+      // Esc in the composer still stops a running agent; an empty composer lets it close the window.
+      const empty = !typing || (el instanceof HTMLTextAreaElement && !el.value);
+      if (empty && !(typing && s.status === "running") && !document.querySelector(".menu, .peek-backdrop.rec-ed-back")) (e.preventDefault(), onClose());
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
-  const on = picked.includes(s.id);
   return (
-    <div className="peek-backdrop" onMouseDown={() => onPeek(null)}>
-      <div ref={ref} className="peek" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="cm-backdrop" onMouseDown={onClose}>
+      <div className="cm" onMouseDown={(e) => e.stopPropagation()}>
         <div className="grid-card-h">
           <b className="ac-title" title={s.title}>
             {s.title}
           </b>
           <RowSub s={s} onTag={() => {}} />
-          <span className="muted mono small">
-            {i + 1} / {order.length}
-          </span>
           <span className="grid-card-acts">
-            <button className="icon-btn" title="Previous chat (⌥↑)" onClick={() => step(-1)}>
-              <ChevronUp size={14} />
+            <button className={`icon-btn ${paneOpen ? "on" : ""}`} title="Side pane (⌘\)" onClick={onTogglePane}>
+              <PanelRight size={13} />
             </button>
-            <button className="icon-btn" title="Next chat (⌥↓)" onClick={() => step(1)}>
-              <ChevronDown size={14} />
-            </button>
-            <button className={`icon-btn ${on ? "r-grid" : ""}`} title={on ? "Remove from the chat grid" : "Add to the chat grid"} onClick={() => grid.toggle(s.id)}>
-              <Grid2x2 size={13} />
-            </button>
-            <button className="icon-btn" title="Open on its own" onClick={() => onOpen(s.id)}>
+            <button className="icon-btn" title="Open in the list view" onClick={onOpenInList}>
               <Maximize2 size={12} />
             </button>
-            <button className="icon-btn" title="Close (esc)" onClick={() => onPeek(null)}>
+            <button className="icon-btn" title="Close (esc)" onClick={onClose}>
               <X size={13} />
             </button>
           </span>
         </div>
-        <div className="grid-card-body">
-          <SessionView key={s.id} session={s} dropZone={ref} />
+        <div className="cm-body">
+          <div className="cm-chat" ref={ref}>
+            <SessionView key={s.id} session={s} dropZone={ref} />
+          </div>
+          {pane}
         </div>
       </div>
     </div>
   );
 }
 
-/** One chat in the grid: its own live session view. Drop a chat from the sidebar on it to replace it. */
 function GridCard({ s, index, onOpen, sessions }: { s: SessionState; index: number; onOpen(id: string): void; sessions: Record<string, SessionState> }) {
   const ref = useRef<HTMLDivElement>(null);
   const menu = useMenu();

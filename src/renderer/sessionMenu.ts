@@ -1,6 +1,7 @@
 import type { RepoWorktree, SessionGroup, SessionState } from "../shared/types";
 import { hub } from "./App";
 import type { MenuItem } from "./Menu";
+import { autoHas } from "./auto";
 
 /** One menu for a session, used by both the sidebar right-click and the header ⋯ button. */
 export function sessionMenuItems(opts: {
@@ -31,6 +32,14 @@ export function sessionMenuItems(opts: {
   const toggleTag = (t: string) => hub().setTags(s.id, tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t]);
 
   const items: MenuItem[] = [{ label: "Rename", key: "r", onSelect: opts.onRename }];
+  if (!s.isManager) {
+    const inAuto = autoHas(s.id);
+    items.push({
+      label: inAuto ? "Remove from Auto" : "Add to Auto",
+      hint: inAuto ? "" : "the pipeline",
+      onSelect: () => (inAuto ? hub().autoRemove(s.id) : hub().autoAdd([s.id]).then(() => opts.toast(`added "${s.title}" to Auto`))),
+    });
+  }
   // A chat started from a Linear ticket: have its agent wrap the ticket up (comment + close), in the chat where you can see it.
   if (s.linearIssue && !s.isManager) {
     items.push({

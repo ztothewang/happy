@@ -12,9 +12,10 @@ import { CloudView } from "./CloudView";
 import { MobileApp } from "./mobile/MobileApp";
 import { Lightbox, openLightbox } from "./Lightbox";
 import { ResizeHandle, usePanelWidth } from "./resize";
-import { ANALYTICS, CHAT_WALL, CALENDAR, CLOUD, EMAIL, GRID, SETTINGS, TASKS, TERMINAL, STATS } from "./Sidebar";
+import { ANALYTICS, CALENDAR, CLOUD, EMAIL, SETTINGS, TASKS, TERMINAL, STATS } from "./Sidebar";
 import { viewing } from "./viewing";
-import { ChatWallView, ChatGridView } from "./ChatViews";
+import { ChatWallView, ChatGridView, ChatModal } from "./ChatViews";
+import { AutoView } from "./AutoView";
 import { useGrid } from "./grid";
 import { SettingsView } from "./SettingsView";
 import { CalendarView } from "./CalendarView";
@@ -72,11 +73,18 @@ export function App() {
 function Shell() {
   const [sessions, setSessions] = useState<Record<string, SessionState>>({});
   const [selected, setSelected] = useState<string | null>(null);
-  // Where to go back to when the grid closes.
-  const beforeGrid = useRef<string | null>(null);
-  useEffect(() => {
-    if (selected !== GRID && selected !== CHAT_WALL) beforeGrid.current = selected;
-  }, [selected]);
+  // The top bar's view switch: List (sidebar + chat) or a whole-page Wall, Grid or Auto, where a chat opens in a window.
+  const [view, setViewState] = useState<"list" | "wall" | "grid" | "auto">(() => loadJson("happy.view", "list"));
+  const [peek, setPeek] = useState<string | null>(null);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+  const setView = useCallback((v: "list" | "wall" | "grid" | "auto") => {
+    setViewState(v);
+    setPeek(null);
+    saveJson("happy.view", v);
+  }, []);
   const gridIds = useGrid();
   // Open a chat from anywhere (e.g. a fresh fork from the session menu).
   useEffect(() => {
@@ -88,9 +96,9 @@ function Shell() {
   useEffect(() => saveJson("happy.sidebar.hidden", sidebarHidden), [sidebarHidden]);
   const repo = useRepo();
   const st = useSettings();
-  useEffect(() => hub().onFocusSession((id) => setSelected(id)), []);
+  useEffect(() => hub().onFocusSession((id) => select(id)), []);
   useEffect(() => {
-    const open = () => setSelected(TERMINAL);
+    const open = () => (viewRef.current !== "list" && setView("list"), setSelected(TERMINAL));
     window.addEventListener("happy:open-terminal", open);
     return () => window.removeEventListener("happy:open-terminal", open);
   }, []);
@@ -222,6 +230,11 @@ function Shell() {
   const allTags = useMemo(() => [...new Set([...(st?.tags ?? []).map((t) => t.name), ...Object.values(sessions).flatMap((s) => s.tags ?? []).sort()])], [sessions, st?.tags]);
 
   const select = useCallback((id: string) => {
+    // On a whole-page view, a chat opens in a window over it; anything else goes back to the list.
+    if (viewRef.current !== "list") {
+      if (sessionsRef.current[id]) return void setPeek(id);
+      setView("list");
+    }
     setSelected(id);
     setUnread((u) => {
       if (!u.has(id)) return u;
@@ -251,7 +264,8 @@ function Shell() {
     void hub().setBadge(unread.size);
   }, [unread]);
 
-  const current = selected && selected !== NEW && selected !== CLOUD && selected !== ANALYTICS && selected !== TASKS && selected !== EMAIL && selected !== CALENDAR && selected !== SETTINGS ? sessions[selected] : undefined;
+  const listCurrent = selected && selected !== NEW && selected !== CLOUD && selected !== ANALYTICS && selected !== TASKS && selected !== EMAIL && selected !== CALENDAR && selected !== SETTINGS ? sessions[selected] : undefined;
+  const current = view === "list" ? listCurrent : peek ? sessions[peek] : undefined;
   const pane = current ? (panes[current.id] ?? { open: false, tabs: [] }) : undefined;
   const togglePane = () => current && updatePane(current.id, (p) => ({ ...p, open: !p.open }));
 
@@ -271,9 +285,9 @@ function Shell() {
       } else if (e.key === "b") {
         e.preventDefault();
         setSidebarHidden((h) => !h);
-      } else if (e.key === "7" || e.key === "8") {
+      } else if (e.key === "7" || e.key === "8" || e.key === "9") {
         e.preventDefault();
-        select(e.key === "7" ? CHAT_WALL : GRID);
+        setView(e.key === "7" ? "wall" : e.key === "8" ? "grid" : "auto");
       } else if (e.key === "\\" && current) {
         e.preventDefault();
         togglePane();
@@ -350,8 +364,10 @@ function Shell() {
   const paletteItems = useMemo<PaletteItem[]>(() => {
     const items: PaletteItem[] = [
       { id: "new", kind: "action", label: "New chat", hint: "⌘N", run: () => setSelected(NEW) },
-      { id: "chatwall", kind: "view", label: "Chat wall", hint: "⌘7", run: () => setSelected(CHAT_WALL) },
-      { id: "grid", kind: "view", label: "Chat grid", hint: "⌘8", run: () => setSelected(GRID) },
+      { id: "list", kind: "view", label: "List view", run: () => setView("list") },
+      { id: "chatwall", kind: "view", label: "Chat wall", hint: "⌘7", run: () => setView("wall") },
+      { id: "grid", kind: "view", label: "Chat grid", hint: "⌘8", run: () => setView("grid") },
+      { id: "auto", kind: "view", label: "Auto pipeline", hint: "⌘9", run: () => setView("auto") },
       { id: "sidebar", kind: "view", label: "Toggle sidebar", hint: "⌘B", run: () => setSidebarHidden((h) => !h) },
       { id: "tools", kind: "view", label: readShowTools() ? "Hide tool steps by default" : "Always show tool steps", run: () => writeShowTools(!readShowTools()) },
       { id: "sys", kind: "view", label: readShowSys() ? "Hide system notes" : "Show system notes", run: () => writeShowSys(!readShowSys()) },
@@ -438,6 +454,40 @@ function Shell() {
     window.addEventListener("mouseup", up);
   };
 
+  // The chat's side pane (browser, files, terminal…): beside the chat in the list, inside the window elsewhere.
+  const paneEl = current && pane?.open ? (
+    <>
+      <div className="resizer" onMouseDown={startResize} />
+      <div className="pane-wrap" style={{ width: pane.width ?? paneWidth }}>
+        <PreviewPane
+          key={current.id}
+          sessionId={current.id}
+          cwd={current.cwd}
+          items={current.items}
+          tabs={pane.tabs}
+          active={pane.active}
+          browser={browserStates[current.id]}
+          hideNative={palette}
+          onActivate={(k) => updatePane(current.id, (p) => ({ ...p, active: k }))}
+          onCloseTab={(k) =>
+            updatePane(current.id, (p) => {
+              const idx = p.tabs.findIndex((t) => t.key === k);
+              const tabs = p.tabs.filter((t) => t.key !== k);
+              const active = p.active === k ? tabs[Math.max(0, idx - 1)]?.key : p.active;
+              return { open: tabs.length > 0 && p.open, tabs, active };
+            })
+          }
+          onClosePane={() => updatePane(current.id, (p) => ({ ...p, open: false }))}
+          onCloseAll={() => updatePane(current.id, (p) => ({ open: false, tabs: [], width: p.width }))}
+          checkouts={[
+            ...(current.worktree?.removed ? [] : [{ path: current.cwd, label: current.worktree?.branch ?? current.git?.branch ?? "this folder" }]),
+            ...(current.linkedWorktrees ?? []).filter((w) => !w.removed).map((w) => ({ path: w.path, label: w.branch ?? w.path.split("/").pop()! })),
+          ]}
+        />
+      </div>
+    </>
+  ) : null;
+
   // Phone width: a separate, touch-first layout over the same data.
   if (narrow) return <MobileApp sessions={sessions} />;
 
@@ -454,12 +504,24 @@ function Shell() {
           onTogglePane={togglePane}
           onPalette={() => setPalette(true)}
           sidebarHidden={sidebarHidden}
-          onToggleSidebar={() => setSidebarHidden((h) => !h)}
-          gridCount={selected === GRID ? 0 : gridIds.length}
-          onGrid={() => select(GRID)}
+          onToggleSidebar={view === "list" ? () => setSidebarHidden((h) => !h) : undefined}
+          view={view}
+          onView={setView}
+          gridCount={gridIds.length}
         />
         <div className="shell-body">
-          {!sidebarHidden && (
+          {view !== "list" && (
+            <main className="main full-view">
+              {view === "wall" ? (
+                <ChatWallView sessions={ordered} groups={groups} onOpen={select} onGrid={() => setView("grid")} />
+              ) : view === "grid" ? (
+                <ChatGridView sessions={sessions} onOpen={select} onWall={() => setView("wall")} onBack={() => setView("list")} />
+              ) : (
+                <AutoView sessions={sessions} onOpen={select} />
+              )}
+            </main>
+          )}
+          {view === "list" && !sidebarHidden && (
           <Sidebar
             sessions={ordered}
             groups={groups}
@@ -473,7 +535,8 @@ function Shell() {
             width={sidebarWidth}
           />
           )}
-          {!sidebarHidden && <div className="resizer" onMouseDown={startSidebarResize} onDoubleClick={() => setSidebarWidth(340)} title="Drag to resize · double-click to reset" />}
+          {view === "list" && !sidebarHidden && <div className="resizer" onMouseDown={startSidebarResize} onDoubleClick={() => setSidebarWidth(340)} title="Drag to resize · double-click to reset" />}
+          {view === "list" && (
           <main className="main" ref={mainRef}>
             {current?.isManager ? (
               <div className="mgr">
@@ -508,10 +571,6 @@ function Shell() {
               <CalendarView />
             ) : selected === TERMINAL ? (
               <TerminalView />
-            ) : selected === CHAT_WALL ? (
-              <ChatWallView sessions={ordered} groups={groups} onOpen={select} onGrid={() => select(GRID)} />
-            ) : selected === GRID ? (
-              <ChatGridView sessions={sessions} onOpen={select} onWall={() => select(CHAT_WALL)} onBack={() => select(beforeGrid.current && sessions[beforeGrid.current] ? beforeGrid.current : (ordered.find((s) => s.isManager)?.id ?? NEW))} />
             ) : selected === STATS ? (
               <StatsView />
             ) : selected === SETTINGS ? (
@@ -526,41 +585,25 @@ function Shell() {
               />
             )}
           </main>
-          {current && pane?.open && (
-            <>
-              <div className="resizer" onMouseDown={startResize} />
-              <div className="pane-wrap" style={{ width: pane.width ?? paneWidth }}>
-                <PreviewPane
-                  key={current.id}
-                  sessionId={current.id}
-                  cwd={current.cwd}
-                  items={current.items}
-                  tabs={pane.tabs}
-                  active={pane.active}
-                  browser={browserStates[current.id]}
-                  hideNative={palette}
-                  onActivate={(k) => updatePane(current.id, (p) => ({ ...p, active: k }))}
-                  onCloseTab={(k) =>
-                    updatePane(current.id, (p) => {
-                      const idx = p.tabs.findIndex((t) => t.key === k);
-                      const tabs = p.tabs.filter((t) => t.key !== k);
-                      const active = p.active === k ? tabs[Math.max(0, idx - 1)]?.key : p.active;
-                      return { open: tabs.length > 0 && p.open, tabs, active };
-                    })
-                  }
-                  onClosePane={() => updatePane(current.id, (p) => ({ ...p, open: false }))}
-                  onCloseAll={() => updatePane(current.id, (p) => ({ open: false, tabs: [], width: p.width }))}
-                  checkouts={[
-                    ...(current.worktree?.removed ? [] : [{ path: current.cwd, label: current.worktree?.branch ?? current.git?.branch ?? "this folder" }]),
-                    ...(current.linkedWorktrees ?? []).filter((w) => !w.removed).map((w) => ({ path: w.path, label: w.branch ?? w.path.split("/").pop()! })),
-                  ]}
-                />
-              </div>
-            </>
           )}
+          {view === "list" && paneEl}
         </div>
         <StatusBar sessions={ordered} usage={usage} onFilter={setFilter} onNew={() => setSelected(NEW)} onPalette={() => setPalette(true)} />
       </div>
+      {view !== "list" && current && (
+        <ChatModal
+          s={current}
+          pane={paneEl}
+          paneOpen={!!pane?.open}
+          onTogglePane={togglePane}
+          onClose={() => setPeek(null)}
+          onOpenInList={() => {
+            const id = current.id;
+            setView("list");
+            setSelected(id);
+          }}
+        />
+      )}
       {palette && <Palette items={paletteItems} onClose={() => setPalette(false)} />}
       {recordings.drafts[0] && <RecordingEditor key={recordings.drafts[0].path} draft={recordings.drafts[0]} title={sessions[recordings.drafts[0].sessionId]?.title} />}
     </PaneContext.Provider>

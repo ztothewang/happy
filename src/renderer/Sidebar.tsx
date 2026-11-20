@@ -831,6 +831,7 @@ export function Sidebar(props: {
   const multiMenu = (ids: string[]) => [
     { label: `New chat about ${ids.length === 1 ? "this chat" : `these ${ids.length} chats`}`, hint: "it reads up, then waits", onSelect: () => void chatAbout(ids) },
     { label: "Add to chat grid", onSelect: () => addToGrid(ids) },
+    { label: "Add to Auto", hint: "the pipeline", onSelect: () => void hub().autoAdd(ids).then(() => (toast(`added ${ids.length} chat${ids.length === 1 ? "" : "s"} to Auto`), setPicked([]))) },
     { type: "separator" as const },
     { label: "Clear selection", hint: "esc", onSelect: () => setPicked([]) },
   ];
@@ -867,9 +868,7 @@ export function Sidebar(props: {
         }
         if (picked.length) setPicked([]);
         anchor.current = s.id;
-        // On the grid, a chat that's in it scrolls to its card instead of leaving.
-        if (props.selected === GRID && grid.ids().includes(s.id)) window.dispatchEvent(new CustomEvent("happy:grid-focus", { detail: s.id }));
-        else props.onSelect(s.id);
+        props.onSelect(s.id);
       }}
       inGrid={gridIds.includes(s.id)}
       onRenamed={() => setRenaming(null)}
@@ -931,8 +930,6 @@ export function Sidebar(props: {
           </button>
         </div>
         {/* The ways to see many chats at once sit with the chats. */}
-        {!filtering && <NavItem icon={<LayoutList size={14} />} label="Chat wall" right={live.filter((x) => !isSystemSession(x)).length || ""} tone="dim" active={props.selected === CHAT_WALL} onClick={() => props.onSelect(CHAT_WALL)} />}
-        {!filtering && <GridNav active={props.selected === GRID} onClick={() => props.onSelect(GRID)} />}
         <Group
           title="General"
           bare={!props.groups.some((g) => chats.some((x) => x.groupId === g.id)) && !routines.length}

@@ -82,6 +82,7 @@ interface Persisted {
     engineState?: Record<string, number>;
   }>;
   groups?: SessionGroup[];
+  auto?: import("../shared/types.js").AutoState;
   /** yyyy-mm-dd → totals (also per engine under "<date>|claude" / "<date>|codex") */
   usage?: Record<string, UsageTotals>;
   limits?: EngineLimits;
@@ -204,6 +205,7 @@ export class Hub implements SessionHost {
   readonly media: MediaStore;
   private sessions = new Map<string, Session>();
   private groupList: SessionGroup[] = [];
+  private autoData: import("../shared/types.js").AutoState = { items: [], autoMerge: false, autoDeploy: false, paused: false };
   private usage: Record<string, UsageTotals> = {};
   private limitState: EngineLimits = {};
   private overviewCache?: Overview;
@@ -245,6 +247,7 @@ export class Hub implements SessionHost {
       update(s: SessionState): void;
       removed(id: string): void;
       groups(g: SessionGroup[]): void;
+      auto(a: import("../shared/types.js").AutoState): void;
       usage(u: UsageTotals): void;
       limits(l: EngineLimits): void;
       overview(o: Overview): void;
@@ -1388,6 +1391,7 @@ export class Hub implements SessionHost {
     try {
       const data = JSON.parse(readFileSync(this.file, "utf8")) as Persisted;
       this.groupList = data.groups ?? [];
+      if (data.auto) this.autoData = { ...this.autoData, ...data.auto };
       this.usage = data.usage ?? {};
       this.limitState = data.limits ?? {};
       for (const { meta, items, costUsd, tokens, activeMs, engineState } of data.sessions) {
@@ -1445,6 +1449,7 @@ export class Hub implements SessionHost {
         engineState: s.engineState,
       })),
       groups: this.groupList,
+      auto: this.autoData,
       usage: this.usage,
       limits: this.limitState,
     };
@@ -1915,6 +1920,46 @@ export class Hub implements SessionHost {
   }
 
   // ── groups ─────────────────────────────────────────────────────
+  // ── Auto pipeline (stage 1: chats in it and their stages, moved by hand) ──
+  autoState() {
+    // Chats that were deleted leave the pipeline.
+    this.autoData.items = this.autoData.items.filter((i) => this.sessions.has(i.sessionId));
+    return this.autoData;
+  }
+  private autoChanged() {
+    this.scheduleSave();
+    this.emit.auto(this.autoState());
+  }
+  private autoEvent(item: import("../shared/types.js").AutoItem, who: string, text: string, tone?: "ok" | "bad" | "you") {
+    item.events = [...item.events, { at: Date.now(), who, text, tone }].slice(-200);
+  }
+  autoAdd(ids: string[]) {
+    for (const id of ids) {
+      const s = this.sessions.get(id);
+      if (!s || isSystemSession(s.meta) || this.autoData.items.some((i) => i.sessionId === id)) continue;
+      const item = { sessionId: id, stage: "working" as const, addedAt: Date.now(), events: [] };
+      this.autoEvent(item, "you", "added to Auto");
+      this.autoData.items = [...this.autoData.items, item];
+    }
+    this.autoChanged();
+  }
+  autoRemove(id: string) {
+    this.autoData.items = this.autoData.items.filter((i) => i.sessionId !== id);
+    this.autoChanged();
+  }
+  autoMove(id: string, stage: import("../shared/types.js").AutoStage, note?: string) {
+    const item = this.autoData.items.find((i) => i.sessionId === id);
+    if (!item) throw new Error("That chat isn't in Auto");
+    const back = stage === "working" && item.stage !== "working";
+    this.autoEvent(item, "you", `moved to ${stage}${note ? `: ${note}` : ""}`, back ? "bad" : undefined);
+    Object.assign(item, { stage, note, back: back || undefined });
+    this.autoChanged();
+  }
+  autoSet(patch: Partial<Pick<import("../shared/types.js").AutoState, "autoMerge" | "autoDeploy" | "paused">>) {
+    this.autoData = { ...this.autoData, ...patch };
+    this.autoChanged();
+  }
+
   groups(): SessionGroup[] {
     return this.groupList;
   }

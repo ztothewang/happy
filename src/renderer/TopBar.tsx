@@ -1,5 +1,5 @@
 import { MoreHorizontal, PanelRight } from "lucide-react";
-import { Grid2x2, PanelLeft } from "lucide-react";
+import { PanelLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { EngineLimits, LimitWindow, SessionGroup, SessionState } from "../shared/types";
 import { hub } from "./App";
@@ -100,7 +100,8 @@ export function TopBar(props: {
   onToggleSidebar?(): void;
   /** Chats in the grid (0 hides the shortcut, e.g. while you're on it). */
   gridCount?: number;
-  onGrid?(): void;
+  view?: "list" | "wall" | "grid" | "auto";
+  onView?(v: "list" | "wall" | "grid" | "auto"): void;
 }) {
   const s = props.session;
   const menu = useMenu();
@@ -126,12 +127,24 @@ export function TopBar(props: {
         <span title={s?.cwd ?? props.newChatRepo}>{s?.isManager ? "all sessions" : baseName(s?.worktree?.repo ?? s?.cwd ?? props.newChatRepo)}</span>
       </div>
 
-      {!!props.gridCount && (
-        <button className="kb tb-grid" title="Back to the chat grid (⌘8)" onClick={props.onGrid}>
-          <Grid2x2 size={12} /> {props.gridCount}
-        </button>
-      )}
       {!hub().isRemote && <GcloudChip />}
+      {props.onView && (
+        <span className="tb-views" role="group" aria-label="View">
+          {(
+            [
+              ["list", "List", "Sidebar and one chat"],
+              ["wall", "Wall", "Every chat as a card (⌘7)"],
+              ["grid", "Grid", "Chats side by side (⌘8)"],
+              ["auto", "Auto", "The pipeline: workers, CI/CD, deploy, QA (⌘9)"],
+            ] as const
+          ).map(([v, label, title]) => (
+            <button key={v} className={props.view === v ? "on" : ""} title={title} onClick={() => props.onView!(v)}>
+              {label}
+              {v === "grid" && !!props.gridCount && <small>{props.gridCount}</small>}
+            </button>
+          ))}
+        </span>
+      )}
       <Limits limits={props.limits} />
       <div className="stats">
         {s && (

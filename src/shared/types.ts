@@ -855,6 +855,34 @@ export interface RemoteStatus {
   message?: string;
 }
 
+/** Where a chat is in the Auto pipeline. */
+export type AutoStage = "working" | "queued" | "ci" | "merge" | "deploy" | "qa" | "done";
+export interface AutoEvent {
+  at: number;
+  /** "you", "Happy", "worker", "CI/CD", "Deploy", "QA". */
+  who: string;
+  text: string;
+  tone?: "ok" | "bad" | "you";
+}
+export interface AutoItem {
+  sessionId: string;
+  stage: AutoStage;
+  /** One line under the card: why it's where it is. */
+  note?: string;
+  /** Sent back to the worker (CI, deploy or QA found a problem). */
+  back?: boolean;
+  addedAt: number;
+  events: AutoEvent[];
+}
+/** The Auto page: chats in the pipeline (workers → CI/CD → Deploy → QA) and its switches. */
+export interface AutoState {
+  items: AutoItem[];
+  autoMerge: boolean;
+  /** Deploy to debreu without asking (other tenants and data steps still ask). */
+  autoDeploy: boolean;
+  paused: boolean;
+}
+
 export interface SessionGroup {
   id: string;
   name: string;
@@ -1177,6 +1205,13 @@ export interface HubApi {
   deleteGroup(groupId: string): Promise<void>;
   setGroupCollapsed(groupId: string, collapsed: boolean): Promise<void>;
   onGroups(cb: (g: SessionGroup[]) => void): () => void;
+  autoState(): Promise<AutoState>;
+  autoAdd(ids: string[]): Promise<void>;
+  autoRemove(id: string): Promise<void>;
+  /** Move a chat to a stage by hand (stage 1 of the pipeline: the agents come next). */
+  autoMove(id: string, stage: AutoStage, note?: string): Promise<void>;
+  autoSet(patch: Partial<Pick<AutoState, "autoMerge" | "autoDeploy" | "paused">>): Promise<void>;
+  onAuto(cb: (a: AutoState) => void): () => void;
   interrupt(id: string): Promise<void>;
   remove(id: string): Promise<void>;
   rename(id: string, title: string): Promise<void>;
