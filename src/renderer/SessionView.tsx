@@ -168,12 +168,12 @@ function ToolBlock({ items, cwd, showAll }: { items: TranscriptItem[]; cwd: stri
   );
 }
 
-function Line({ b, cwd, who, showTools, onSimplify, onPin, onWtf, onStatus, onTags, onContextMenu }: { b: Block; cwd: string; who: string; showTools: boolean; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void; onTags?(): Promise<void>; onContextMenu?(e: React.MouseEvent): void }) {
+function Line({ b, cwd, who, showTools, onSimplify, onPin, onWtf, onStatus, onTags, onReview, onContextMenu }: { b: Block; cwd: string; who: string; showTools: boolean; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void; onTags?(): Promise<void>; onReview?(): void; onContextMenu?(e: React.MouseEvent): void }) {
   const pane = usePane();
   if (b.kind === "tools") return <ToolBlock items={b.items} cwd={cwd} showAll={showTools} />;
   return (
     <div data-item={b.it.id} className={b.it.pinned ? "pinned-item" : undefined} onContextMenu={onContextMenu}>
-      <ItemLine it={b.it} who={who} openFile={(f) => pane.open({ kind: "file", path: f })} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} onTags={onTags} />
+      <ItemLine it={b.it} who={who} openFile={(f) => pane.open({ kind: "file", path: f })} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} onTags={onTags} onReview={onReview} />
     </div>
   );
 }
@@ -206,6 +206,12 @@ const WTF_PROMPT =
 /** "status" macro: just asks. */
 const STATUS_PROMPT = "Status?";
 
+/** "review" macro: a visible ask for an independent code review of the latest work. */
+const REVIEW_PROMPT =
+  "Spawn a subagent acting as a cracked staff engineer to review the code changes in your latest worktree (or branch/checkout if there's no worktree): the uncommitted changes plus the commits not yet on main. " +
+  "Have it look hard for bugs, edge cases, breaking changes, security and data risks, missing or weak tests, and anything that doesn't follow the repo's conventions, and report each issue with file:line, severity and a suggested fix. " +
+  "Don't change anything yet: bring its findings back to me, with your take on which ones are real.";
+
 /** Copy a reply's original Markdown to the clipboard. */
 function CopyBtn({ text }: { text: string }) {
   const [done, setDone] = useState(false);
@@ -226,7 +232,7 @@ function CopyBtn({ text }: { text: string }) {
 }
 
 /** Assistant reply with an optional plain-language rewrite (shown by default once made) and a toggle. */
-function AssistantBody({ it, onSimplify, onPin, onWtf, onStatus, onTags }: { it: TranscriptItem; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void; onTags?(): Promise<void> }) {
+function AssistantBody({ it, onSimplify, onPin, onWtf, onStatus, onTags, onReview }: { it: TranscriptItem; onSimplify?: () => Promise<void>; onPin?(v: boolean): void; onWtf?(): void; onStatus?(): void; onTags?(): Promise<void>; onReview?(): void }) {
   const [showOriginal, setShowOriginal] = useState(false);
   const [tagging, setTagging] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -270,6 +276,11 @@ function AssistantBody({ it, onSimplify, onPin, onWtf, onStatus, onTags }: { it:
           status
         </button>
       )}
+      {onReview && (
+        <button className="simplify" onClick={onReview} title="Ask the agent to have a staff-engineer subagent review its latest changes">
+          review
+        </button>
+      )}
       {onTags && (
         <button
           className="simplify"
@@ -303,6 +314,7 @@ const ItemLine = memo(function ItemLine({
   onWtf,
   onStatus,
   onTags,
+  onReview,
 }: {
   it: TranscriptItem;
   who: string;
@@ -312,6 +324,7 @@ const ItemLine = memo(function ItemLine({
   onWtf?(): void;
   onStatus?(): void;
   onTags?(): Promise<void>;
+  onReview?(): void;
 }) {
   const ts = <span className="ts">{fmtClock(it.ts)}</span>;
   switch (it.kind) {
@@ -343,7 +356,7 @@ const ItemLine = memo(function ItemLine({
           {ts}
           <span className="who">{who}</span>
           <div className="body">
-            <AssistantBody it={it} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} onTags={onTags} />
+            <AssistantBody it={it} onSimplify={onSimplify} onPin={onPin} onWtf={onWtf} onStatus={onStatus} onTags={onTags} onReview={onReview} />
           </div>
         </div>
       );
@@ -642,6 +655,7 @@ export function SessionView({
             onPin={b.kind === "item" && (b.it.kind === "assistant" || b.it.kind === "user") ? (v) => void hub().pinItem(s.id, b.it.id, v) : undefined}
             onWtf={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, WTF_PROMPT) : undefined}
             onStatus={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, STATUS_PROMPT) : undefined}
+            onReview={b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId ? () => void hub().send(s.id, REVIEW_PROMPT) : undefined}
             onTags={
               b.kind === "item" && b.it.kind === "assistant" && b.it.id === lastMsgId
                 ? async () => {
