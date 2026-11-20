@@ -32,6 +32,8 @@ const marked = new Marked({
     codespan({ text }) {
       // marked passes escaped text; un-escape to test, keep escaped for output.
       const raw = unescapeHtml(text);
+      // Agents often put URLs in backticks: still a link.
+      if (/^https?:\/\/[^\s<>"'`]+$/i.test(raw)) return `<a href="${escapeHtml(raw).replace(/"/g, "&quot;")}" class="code-link"><code>${text}</code></a>`;
       return looksLikePath(raw)
         ? `<code class="path-link" data-path="${text}">${text}</code>`
         : `<code>${text}</code>`;

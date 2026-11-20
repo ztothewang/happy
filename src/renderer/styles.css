@@ -2025,3 +2025,4 @@ pre.code { position: relative; }
 .tk-parent-of .link-btn { font-size: 12px; padding: 0; }
 .tk-parent-title { color: var(--dim); }
 .tk-side-h > .mono { white-space: nowrap; flex-shrink: 0; }
+.md a.code-link code { color: var(--accent); }
