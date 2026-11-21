@@ -1169,7 +1169,8 @@ export type BrowserEdit = "copy" | "cut" | "paste" | "selectAll" | "inspect";
 
 export type FileContent =
   | { kind: "text"; text: string; size: number }
-  | { kind: "image" | "pdf" | "binary"; size: number }
+  /** preview: a converted copy to show instead (HEIC → JPEG, Word/PowerPoint → PDF, Keynote → first-page PNG). */
+  | { kind: "image" | "pdf" | "binary"; size: number; preview?: string; note?: string }
   | { kind: "missing" }
   | { kind: "too_large"; size: number };
 

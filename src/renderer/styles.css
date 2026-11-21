@@ -2155,3 +2155,4 @@ pre.code { position: relative; }
 .mx-app.mx-desktop { padding-top: 30px; }
 .mx-app.mx-desktop::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 30px; -webkit-app-region: drag; }
 .mx-desktop .mx-sheet.full { top: 70px; }
+.pad-x { padding: 6px 12px 0; }

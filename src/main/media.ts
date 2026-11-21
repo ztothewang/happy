@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
 import { open } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +11,51 @@ import type { DirEntry, FileContent, GitChange, ResolvedLink } from "../shared/t
 const run = promisify(execFile);
 const MAX_TEXT = 2 * 1024 * 1024;
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico", ".avif"]);
+/** Photos Chromium can't show: converted to JPEG with macOS's sips. */
+const CONVERT_IMAGE_EXT = new Set([".heic", ".heif", ".tif", ".tiff"]);
+/** Office documents: converted to PDF with LibreOffice when it's installed. */
+const OFFICE_EXT = new Set([".docx", ".doc", ".pptx", ".ppt", ".odt", ".odp", ".rtf", ".ppsx"]);
+/** Apple's own formats (and Office files without LibreOffice): a Quick Look picture of the first page. */
+const QUICKLOOK_EXT = new Set([".key", ".pages", ".numbers"]);
+const PREVIEW_DIR = join(tmpdir(), "happy-previews");
+const SOFFICE = ["/opt/homebrew/bin/soffice", "/usr/local/bin/soffice", "/Applications/LibreOffice.app/Contents/MacOS/soffice"].find((p) => existsSync(p));
+
+/** Converted copies live in a temp folder, keyed by the file and its modification time (a change makes a new one). */
+async function converted(path: string, ext: string, make: (out: string, dir: string) => Promise<string | undefined>): Promise<string | undefined> {
+  const st = statSync(path);
+  const key = createHash("sha1").update(`${path}|${st.mtimeMs}|${st.size}`).digest("hex").slice(0, 16);
+  const dir = join(PREVIEW_DIR, key);
+  const out = join(dir, `${basename(path, extname(path))}${ext}`);
+  if (existsSync(out)) return out;
+  mkdirSync(dir, { recursive: true });
+  return make(out, dir).catch(() => undefined);
+}
+
+/** A file Chromium can't show itself, as something it can: (path of a JPEG, PDF or PNG, and how to show it). */
+async function previewable(path: string, ext: string): Promise<{ kind: "image" | "pdf"; preview: string; note?: string } | undefined> {
+  if (CONVERT_IMAGE_EXT.has(ext)) {
+    const out = await converted(path, ".jpg", async (o) => (await run("sips", ["-s", "format", "jpeg", "-s", "formatOptions", "85", path, "--out", o], { timeout: 60_000 }), o));
+    return out ? { kind: "image", preview: out } : undefined;
+  }
+  if (OFFICE_EXT.has(ext) && SOFFICE) {
+    const out = await converted(path, ".pdf", async (o, dir) => {
+      // Its own profile, so it runs even while LibreOffice is open.
+      await run(SOFFICE, [`-env:UserInstallation=file://${join(PREVIEW_DIR, "lo-profile")}`, "--headless", "--convert-to", "pdf", "--outdir", dir, path], { timeout: 120_000 });
+      return existsSync(o) ? o : undefined;
+    });
+    if (out) return { kind: "pdf", preview: out };
+  }
+  if (OFFICE_EXT.has(ext) || QUICKLOOK_EXT.has(ext)) {
+    const out = await converted(path, ".png", async (o, dir) => {
+      await run("qlmanage", ["-t", "-s", "1600", "-o", dir, path], { timeout: 60_000 });
+      const made = readdirSync(dir).find((f) => f.endsWith(".png"));
+      return made ? join(dir, made) : undefined;
+    });
+    if (out) return { kind: "image", preview: out, note: "First page only (a Quick Look preview)." };
+  }
+  return undefined;
+}
+
 const MIME_EXT: Record<string, string> = {
   "image/png": ".png",
   "image/jpeg": ".jpg",
@@ -55,6 +102,10 @@ export async function readFileForPreview(path: string): Promise<FileContent> {
   const ext = extname(path).toLowerCase();
   if (IMAGE_EXT.has(ext)) return { kind: "image", size };
   if (ext === ".pdf") return { kind: "pdf", size };
+  if (CONVERT_IMAGE_EXT.has(ext) || OFFICE_EXT.has(ext) || QUICKLOOK_EXT.has(ext)) {
+    const p = await previewable(path, ext);
+    return p ? { ...p, size } : { kind: "binary", size };
+  }
   if (size > MAX_TEXT) return { kind: "too_large", size };
   const fh = await open(path, "r");
   try {

@@ -433,7 +433,7 @@ function FileView({ path, line, cwd, sessionId }: { path: string; line?: number;
         </Suspense>
       </div>
     );
-  if (c.kind === "image") return <ImageView path={path} />;
+  if (c.kind === "image") return <ImageView path={path} preview={c.preview} note={c.note} />;
   // HTML (e.g. Codex's visualize previews): rendered in a sandboxed frame, with a source toggle.
   if (isHtml && htmlLive && c.kind === "text")
     return (
@@ -453,7 +453,7 @@ function FileView({ path, line, cwd, sessionId }: { path: string; line?: number;
     return (
       <div className="file">
         {header}
-        <iframe className="pdf" src={`${fileUrl(path, reload)}#toolbar=0&navpanes=0&view=FitH`} title={path} />
+        <iframe className="pdf" src={`${fileUrl(c.preview ?? path, reload)}#toolbar=0&navpanes=0&view=FitH`} title={path} />
       </div>
     );
   if (c.kind !== "text")
@@ -496,7 +496,7 @@ function FileView({ path, line, cwd, sessionId }: { path: string; line?: number;
   );
 }
 
-function ImageView({ path }: { path: string }) {
+function ImageView({ path, preview, note }: { path: string; /** A converted copy to show (HEIC → JPEG, a Quick Look picture). */ preview?: string; note?: string }) {
   const [fit, setFit] = useState(true);
   const [v, setV] = useState(0);
   return (
@@ -505,9 +505,15 @@ function ImageView({ path }: { path: string }) {
         <button className="link-btn" onClick={() => setFit(!fit)}>
           {fit ? "actual size" : "fit"}
         </button>
+        {preview && (
+          <button className="link-btn" onClick={() => void hub().openFile(path)} title="Open in its own app">
+            open
+          </button>
+        )}
       </FileHeader>
+      {note && <div className="muted small pad-x">{note}</div>}
       <div className={`image-body ${fit ? "fit" : ""}`}>
-        <img src={fileUrl(path, v)} alt={path} />
+        <img src={fileUrl(preview ?? path, v)} alt={path} />
       </div>
     </div>
   );
