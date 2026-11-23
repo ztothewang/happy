@@ -648,6 +648,21 @@ export function RowSub({ s, onTag }: { s: SessionState; onTag(t: string): void }
   );
 }
 
+/** Group colors (cool tones), picked in order unless you choose one. */
+const GROUP_COLORS = [
+  { name: "Blue", value: "#8fb4ff" },
+  { name: "Violet", value: "#c4a7e7" },
+  { name: "Teal", value: "#7fd4c8" },
+  { name: "Green", value: "#a6e3a1" },
+  { name: "Pink", value: "#f2a7c8" },
+  { name: "Lavender", value: "#b4befe" },
+  { name: "Slate", value: "#9aa3ae" },
+];
+const GENERAL_COLOR = "#9aa3ae";
+const ROUTINES_COLOR = "#7f849c";
+const ARCHIVED_COLOR = "#5c5c5c";
+const groupColor = (g: SessionGroup, i: number) => g.color ?? GROUP_COLORS[i % (GROUP_COLORS.length - 1)].value;
+
 function Group(props: {
   title: string;
   members: SessionState[];
@@ -658,16 +673,20 @@ function Group(props: {
   renaming?: boolean;
   onRename?(name: string | null): void;
   extra?: React.ReactNode;
-  /** Group color (unused in the compact sidebar). */
+  /** The panel's color swatch. */
   color?: string;
+  /** Chats in it that need you (waiting on you, failed, finished unread): counted in the header. */
+  needs?: number;
   /** No header (ungrouped chats when there are no groups). */
   bare?: boolean;
   children: React.ReactNode;
 }) {
   const [over, setOver] = useState(false);
+  const running = props.members.filter((m) => m.status === "running" || m.preparing).length;
   return (
     <div
-      className={`section-wrap ${over ? "drop-over" : ""}`}
+      className={`section-wrap ${props.bare ? "" : "g-panel"} ${props.collapsed ? "g-closed" : ""} ${over ? "drop-over" : ""}`}
+      style={props.color ? ({ ["--gc" as string]: props.color } as React.CSSProperties) : undefined}
       onDragOver={(e) => {
         if (!props.onDropSession || !e.dataTransfer.types.includes(DRAG_TYPE)) return;
         e.preventDefault();
@@ -684,6 +703,7 @@ function Group(props: {
     >
       {!props.bare && <div className="gh" onClick={props.onToggle} onContextMenu={props.onContext}>
         {props.onToggle && <span className={`caret-icon ${props.collapsed ? "" : "open"}`}>›</span>}
+        <span className="g-swatch" />
         {props.renaming ? (
           <input
             className="row-rename"
@@ -701,12 +721,24 @@ function Group(props: {
           <span className="gh-title">{props.title}</span>
         )}
         <span className="gh-agg">
+          {running > 0 && (
+            <span className="g-stat run" title={`${running} running`}>
+              <i />
+              {running}
+            </span>
+          )}
+          {!!props.needs && (
+            <span className="g-stat need" title={`${props.needs} need${props.needs === 1 ? "s" : ""} you`}>
+              <i />
+              {props.needs}
+            </span>
+          )}
           {props.members.length > 0 && <span className="gh-count">{num(props.members.length)}</span>}
           {props.extra}
         </span>
       </div>}
       {!props.collapsed && (
-        <div className={props.color ? "g-body" : undefined} style={props.color ? ({ ["--gc" as string]: props.color } as React.CSSProperties) : undefined}>
+        <div className="g-body">
           {props.children}
         </div>
       )}
@@ -818,6 +850,8 @@ export function Sidebar(props: {
     const t = setTimeout(() => document.querySelector(".sidebar .r.on")?.scrollIntoView({ block: "nearest" }), 50);
     return () => clearTimeout(t);
   }, [props.selected]);
+  // What makes a chat count as needing you in a group's header.
+  const needsYou = (list: SessionState[]) => list.filter((m) => m.status === "needs_permission" || m.status === "error" || props.unread.get(m.id) === "blocked" || props.unread.get(m.id) === "failed").length;
   const pickedChats = picked.map((id) => props.sessions.find((x) => x.id === id)).filter((x): x is SessionState => !!x);
   const chatAbout = async (ids: string[]) => {
     try {
@@ -934,9 +968,10 @@ export function Sidebar(props: {
             <Plus size={14} />
           </button>
         </div>
-        {/* The ways to see many chats at once sit with the chats. */}
         <Group
           title="General"
+          color={GENERAL_COLOR}
+          needs={needsYou(ungrouped)}
           bare={!props.groups.some((g) => chats.some((x) => x.groupId === g.id)) && !routines.length}
           members={ungrouped}
           onDropSession={(id) => hub().moveToGroup(id, null)}
@@ -953,6 +988,8 @@ export function Sidebar(props: {
             <Group
               key={g.id}
               title={g.name}
+              color={groupColor(g, props.groups.indexOf(g))}
+              needs={needsYou(members)}
               members={members}
               collapsed={g.collapsed && !filtering}
               onToggle={() => hub().setGroupCollapsed(g.id, !g.collapsed)}
@@ -965,6 +1002,14 @@ export function Sidebar(props: {
               onContext={(e) =>
                 menu.atMouse(e, [
                   { label: "Rename group", onSelect: () => setRenamingGroup(g.id) },
+                  {
+                    label: "Color",
+                    submenu: [
+                      ...GROUP_COLORS.map((c) => ({ label: c.name, checked: groupColor(g, props.groups.indexOf(g)) === c.value, onSelect: () => void hub().setGroupColor(g.id, c.value) })),
+                      { type: "separator" as const },
+                      { label: "Automatic", checked: !g.color, onSelect: () => void hub().setGroupColor(g.id, null) },
+                    ],
+                  },
                   { label: "Delete group", danger: true, hint: "keeps sessions", onSelect: () => hub().deleteGroup(g.id) },
                 ])
               }
@@ -1000,6 +1045,8 @@ export function Sidebar(props: {
         {routines.length > 0 && (
           <Group
             title="Routines"
+            color={ROUTINES_COLOR}
+            needs={needsYou(routines)}
             members={routines}
             collapsed={!routinesOpen && !filtering}
             onToggle={() => {
@@ -1015,7 +1062,7 @@ export function Sidebar(props: {
 
         {archived.length > 0 && (
           // The chat you're on (opened from a link, Tasks or the Manager) shows highlighted even when it's archived.
-          <Group title="Archived" members={archived} collapsed={!showArchived && !filtering && !archived.some((x) => x.id === props.selected)} onToggle={() => setShowArchived(!showArchived)}>
+          <Group title="Archived" color={ARCHIVED_COLOR} members={archived} collapsed={!showArchived && !filtering && !archived.some((x) => x.id === props.selected)} onToggle={() => setShowArchived(!showArchived)}>
             {rows(archived)}
           </Group>
         )}

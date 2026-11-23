@@ -914,6 +914,8 @@ export interface SessionGroup {
   id: string;
   name: string;
   collapsed?: boolean;
+  /** Its color in the sidebar (unset = picked from its position). */
+  color?: string;
 }
 
 /** A Codex thread that can be imported into Happy (Settings → Import). */
@@ -1232,6 +1234,7 @@ export interface HubApi {
   renameGroup(groupId: string, name: string): Promise<void>;
   deleteGroup(groupId: string): Promise<void>;
   setGroupCollapsed(groupId: string, collapsed: boolean): Promise<void>;
+  setGroupColor(groupId: string, color: string | null): Promise<void>;
   onGroups(cb: (g: SessionGroup[]) => void): () => void;
   autoState(): Promise<AutoState>;
   autoAdd(ids: string[]): Promise<void>;

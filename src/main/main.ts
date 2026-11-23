@@ -294,6 +294,7 @@ app.whenReady().then(async () => {
   handle("hub:renameGroup", (id: string, name: string) => hub.renameGroup(id, name));
   handle("hub:deleteGroup", (id: string) => hub.deleteGroup(id));
   handle("hub:setGroupCollapsed", (id: string, c: boolean) => hub.setGroupCollapsed(id, c));
+  handle("hub:setGroupColor", (id: string, color: string | null) => hub.setGroupColor(id, color));
   handle("hub:interrupt", (id: string) => hub.get(id).stopTurn());
   handle("hub:remove", (id: string) => hub.remove(id));
   handle("hub:rename", (id: string, title: string) => hub.rename(id, title));

@@ -33,6 +33,7 @@ export function makeApi(invoke: Invoke, listen: Listen, extras: { pathForFile(fi
   renameGroup: (id, name) => invoke("hub:renameGroup", id, name),
   deleteGroup: (id) => invoke("hub:deleteGroup", id),
   setGroupCollapsed: (id, c) => invoke("hub:setGroupCollapsed", id, c),
+  setGroupColor: (id, color) => invoke("hub:setGroupColor", id, color),
   onGroups: (cb) => listen("hub:groups", cb),
   autoState: () => invoke("hub:autoState"),
   autoAdd: (ids) => invoke("hub:autoAdd", ids),

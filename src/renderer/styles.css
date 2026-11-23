@@ -2165,3 +2165,18 @@ pre.code { position: relative; }
 .tk-comments textarea:focus { outline: none; border-color: var(--accent); }
 .tk-c-new { margin-top: 8px; }
 .tk-c-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+
+/* Sidebar groups as panels: a soft panel per group, a colored swatch, its name in full weight, live counts. */
+.sidebar .section-wrap.g-panel { background: color-mix(in srgb, var(--raise) 55%, transparent); border: 1px solid color-mix(in srgb, var(--div) 70%, transparent); border-radius: 9px; margin: 6px 2px 0; padding: 0 2px 3px; }
+.sidebar .section-wrap.g-panel.g-closed { padding-bottom: 0; }
+.sidebar .g-panel .gh { font: 600 12px var(--f); color: var(--fg); padding: 7px 8px 5px; cursor: pointer; }
+.sidebar .g-panel.g-closed .gh { padding-bottom: 7px; }
+.sidebar .g-panel .gh:hover .gh-title { color: var(--fg); }
+.g-swatch { width: 8px; height: 8px; border-radius: 3px; background: var(--gc, var(--dim2)); flex-shrink: 0; }
+.section-wrap:not(.g-panel) .g-swatch { display: none; }
+.g-stat { display: inline-flex; align-items: center; gap: 4px; font: 500 10.5px var(--fm); }
+.g-stat i { width: 6px; height: 6px; border-radius: 3px; display: inline-block; }
+.g-stat.run { color: var(--run); } .g-stat.run i { background: var(--run); }
+.g-stat.need { color: var(--warn); } .g-stat.need i { background: var(--warn); }
+.sidebar .g-panel .r:hover { background: var(--hover); }
+.sidebar .g-panel .r.on { background: var(--sel); }

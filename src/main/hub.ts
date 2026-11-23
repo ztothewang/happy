@@ -2186,6 +2186,11 @@ export class Hub implements SessionHost {
     this.groupsChanged();
   }
 
+  setGroupColor(groupId: string, color: string | null) {
+    this.groupList = this.groupList.map((g) => (g.id === groupId ? { ...g, color: color ?? undefined } : g));
+    this.groupsChanged();
+  }
+
   setGroupCollapsed(groupId: string, collapsed: boolean) {
     this.groupList = this.groupList.map((g) => (g.id === groupId ? { ...g, collapsed } : g));
     this.groupsChanged();
