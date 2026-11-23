@@ -813,6 +813,11 @@ export function Sidebar(props: {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [picked.length]);
+  // Opening a chat from elsewhere (a link, Tasks, the Manager) scrolls its row into view.
+  useEffect(() => {
+    const t = setTimeout(() => document.querySelector(".sidebar .r.on")?.scrollIntoView({ block: "nearest" }), 50);
+    return () => clearTimeout(t);
+  }, [props.selected]);
   const pickedChats = picked.map((id) => props.sessions.find((x) => x.id === id)).filter((x): x is SessionState => !!x);
   const chatAbout = async (ids: string[]) => {
     try {
@@ -1009,7 +1014,8 @@ export function Sidebar(props: {
         )}
 
         {archived.length > 0 && (
-          <Group title="Archived" members={archived} collapsed={!showArchived && !filtering} onToggle={() => setShowArchived(!showArchived)}>
+          // The chat you're on (opened from a link, Tasks or the Manager) shows highlighted even when it's archived.
+          <Group title="Archived" members={archived} collapsed={!showArchived && !filtering && !archived.some((x) => x.id === props.selected)} onToggle={() => setShowArchived(!showArchived)}>
             {rows(archived)}
           </Group>
         )}

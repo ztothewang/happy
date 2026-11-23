@@ -438,19 +438,7 @@ function IssuePanel({ issue, sessions, engine, onEngine, onStart, onOpen, onClos
                 ))}
               </div>
             )}
-            {d.comments.length > 0 && (
-              <div className="tk-sub">
-                <h4>Comments · {num(d.comments.length)}</h4>
-                {d.comments.map((c, i) => (
-                  <div key={i} className="tk-comment">
-                    <div className="muted small">
-                      <b>{c.author}</b> · {relTime(c.createdAt)}
-                    </div>
-                    <Markdown text={c.body} />
-                  </div>
-                ))}
-              </div>
-            )}
+            <Comments issueId={issue.id} comments={d.comments} onChanged={() => void hub().taskDetail(issue.id).then(setD)} />
           </>
         )}
       </div>
@@ -768,6 +756,100 @@ export function TasksView({ sessions, onOpen }: { sessions: Record<string, Sessi
           />
         )
       )}
+      </div>
+    </div>
+  );
+}
+
+/** A ticket's comments: read them, add one (⌘↵ posts), edit or delete your own. */
+function Comments({ issueId, comments, onChanged }: { issueId: string; comments: LinearIssueDetail["comments"]; onChanged(): void }) {
+  const toast = useToast();
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const run = async (f: () => Promise<void>, done?: () => void) => {
+    setBusy(true);
+    try {
+      await f();
+      done?.();
+      onChanged();
+    } catch (e) {
+      toast(cleanErr(e));
+    }
+    setBusy(false);
+  };
+  const post = () => draft.trim() && void run(() => hub().linearAddComment(issueId, draft.trim()), () => setDraft(""));
+  return (
+    <div className="tk-sub tk-comments">
+      <h4>Comments{comments.length ? ` · ${num(comments.length)}` : ""}</h4>
+      {comments.map((c) => (
+        <div key={c.id} className="tk-comment">
+          <div className="muted small tk-c-h">
+            <span>
+              <b>{c.author}</b> · {relTime(c.createdAt)}
+              {c.edited ? " · edited" : ""}
+            </span>
+            {c.mine && editing?.id !== c.id && (
+              <span className="tk-c-acts">
+                <button className="link-btn" onClick={() => setEditing({ id: c.id, body: c.body })}>
+                  edit
+                </button>
+                {confirmDel === c.id ? (
+                  <button className="link-btn danger" disabled={busy} onClick={() => void run(() => hub().linearDeleteComment(c.id), () => setConfirmDel(null))}>
+                    delete for good?
+                  </button>
+                ) : (
+                  <button className="link-btn" onClick={() => setConfirmDel(c.id)} onBlur={() => setTimeout(() => setConfirmDel((x) => (x === c.id ? null : x)), 200)}>
+                    delete
+                  </button>
+                )}
+              </span>
+            )}
+          </div>
+          {editing?.id === c.id ? (
+            <div className="tk-c-edit">
+              <textarea
+                id={`tk-c-edit-${c.id}`}
+                value={editing.body}
+                autoFocus
+                rows={Math.min(12, Math.max(3, editing.body.split("\n").length + 1))}
+                onChange={(e) => setEditing({ id: c.id, body: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.metaKey) (e.preventDefault(), void run(() => hub().linearEditComment(c.id, editing.body.trim()), () => setEditing(null)));
+                  if (e.key === "Escape") setEditing(null);
+                }}
+              />
+              <div className="tk-c-row">
+                <button className="tk-go" disabled={busy || !editing.body.trim()} onClick={() => void run(() => hub().linearEditComment(c.id, editing.body.trim()), () => setEditing(null))}>
+                  save
+                </button>
+                <button className="link-btn" onClick={() => setEditing(null)}>
+                  cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <Markdown text={c.body} />
+          )}
+        </div>
+      ))}
+      <div className="tk-c-new">
+        <textarea
+          id={`tk-c-new-${issueId}`}
+          placeholder="Add a comment (markdown) · ⌘↵ to post"
+          value={draft}
+          rows={draft.split("\n").length > 2 ? 5 : 2}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && e.metaKey && (e.preventDefault(), post())}
+        />
+        {draft.trim() && (
+          <div className="tk-c-row">
+            <button className="tk-go" disabled={busy} onClick={post}>
+              {busy ? "posting…" : "comment"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -2156,3 +2156,12 @@ pre.code { position: relative; }
 .mx-app.mx-desktop::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 30px; -webkit-app-region: drag; }
 .mx-desktop .mx-sheet.full { top: 70px; }
 .pad-x { padding: 6px 12px 0; }
+
+/* Linear comments in the issue panel. */
+.tk-c-h { display: flex; align-items: center; gap: 8px; }
+.tk-c-acts { margin-left: auto; display: flex; gap: 8px; }
+.tk-c-acts .danger { color: var(--bad); }
+.tk-comments textarea { width: 100%; box-sizing: border-box; font: 13px/1.45 var(--f); color: var(--fg); background: var(--bg); border: 1px solid var(--div); border-radius: 8px; padding: 7px 9px; resize: vertical; }
+.tk-comments textarea:focus { outline: none; border-color: var(--accent); }
+.tk-c-new { margin-top: 8px; }
+.tk-c-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }

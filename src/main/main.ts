@@ -474,6 +474,9 @@ app.whenReady().then(async () => {
   handle("linear:clearKey", () => hub.linear.clearKey());
   handle("hub:tasks", (scope, refresh?: boolean) => (demo?.linear ? { scope, fetchedAt: Date.now(), issues: demo.linear.issues } : hub.tasks(scope, refresh)));
   handle("linear:meta", () => hub.linear.meta());
+  handle("linear:addComment", (issueId: string, body: string) => hub.linear.addComment(issueId, body));
+  handle("linear:editComment", (id: string, body: string) => hub.linear.editComment(id, body));
+  handle("linear:deleteComment", (id: string) => hub.linear.deleteComment(id));
   handle("linear:update", async (id: string, input) => {
     hub.patchTask(await hub.linear.updateIssue(id, input));
   });

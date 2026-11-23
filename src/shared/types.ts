@@ -647,7 +647,8 @@ export interface LinearIssueDetail {
   projectId?: string;
   labelIds: string[];
   creator?: string;
-  comments: Array<{ author: string; body: string; createdAt: number }>;
+  /** mine: you wrote it (so you can edit or delete it). */
+  comments: Array<{ id: string; author: string; mine?: boolean; body: string; createdAt: number; edited?: boolean }>;
   attachments: Array<{ title: string; url: string }>;
   children: Array<{ identifier: string; title: string; status?: string; done: boolean }>;
 }
@@ -1424,6 +1425,9 @@ export interface HubApi {
   taskDetail(id: string): Promise<LinearIssueDetail>;
   linearMeta(): Promise<LinearMeta>;
   linearUpdate(id: string, input: LinearIssueInput): Promise<void>;
+  linearAddComment(issueId: string, body: string): Promise<void>;
+  linearEditComment(id: string, body: string): Promise<void>;
+  linearDeleteComment(id: string): Promise<void>;
   linearCreate(input: LinearIssueInput): Promise<{ id: string; identifier: string; url: string }>;
   /** Claude turns a description into a filled-in issue form (nothing is created). */
   linearParse(text: string): Promise<LinearIssueInput>;

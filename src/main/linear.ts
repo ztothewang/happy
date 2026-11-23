@@ -210,13 +210,27 @@ export class Linear {
     return d.issueCreate.issue;
   }
 
+  /** Comments: post one on an issue, or edit / delete one of yours. */
+  async addComment(issueId: string, body: string) {
+    const d = await this.gql(`mutation($input: CommentCreateInput!) { commentCreate(input: $input) { success } }`, { input: { issueId, body } });
+    if (!d.commentCreate.success) throw new Error("Linear didn't save the comment");
+  }
+  async editComment(id: string, body: string) {
+    const d = await this.gql(`mutation($id: String!, $input: CommentUpdateInput!) { commentUpdate(id: $id, input: $input) { success } }`, { id, input: { body } });
+    if (!d.commentUpdate.success) throw new Error("Linear didn't save the change");
+  }
+  async deleteComment(id: string) {
+    const d = await this.gql(`mutation($id: String!) { commentDelete(id: $id) { success } }`, { id });
+    if (!d.commentDelete.success) throw new Error("Linear didn't delete the comment");
+  }
+
   async issueDetail(id: string): Promise<LinearIssueDetail> {
     const d = await this.gql(
       `query($id: String!) {
         issue(id: $id) {
           identifier description creator { name }
           team { id } state { id } assignee { id } project { id } labels { nodes { id } }
-          comments(first: 50) { nodes { body createdAt user { name } } }
+          comments(first: 100) { nodes { id body createdAt editedAt user { name isMe } } }
           attachments(first: 20) { nodes { title url } }
           children(first: 30) { nodes { identifier title state { name type } } }
         }
@@ -234,7 +248,7 @@ export class Linear {
       projectId: i.project?.id,
       labelIds: (i.labels?.nodes ?? []).map((l: any) => l.id),
       comments: (i.comments?.nodes ?? [])
-        .map((c: any) => ({ author: c.user?.name ?? "someone", body: c.body, createdAt: Date.parse(c.createdAt) }))
+        .map((c: any) => ({ id: c.id, author: c.user?.name ?? "someone", mine: !!c.user?.isMe, body: c.body, createdAt: Date.parse(c.createdAt), edited: !!c.editedAt }))
         .sort((a: any, b: any) => a.createdAt - b.createdAt),
       attachments: (i.attachments?.nodes ?? []).map((a: any) => ({ title: a.title, url: a.url })),
       children: (i.children?.nodes ?? []).map((c: any) => ({ identifier: c.identifier, title: c.title, status: c.state?.name, done: ["completed", "canceled"].includes(c.state?.type) })),
