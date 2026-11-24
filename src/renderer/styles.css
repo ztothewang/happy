@@ -2167,7 +2167,9 @@ pre.code { position: relative; }
 .tk-c-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 
 /* Sidebar groups as panels: a soft panel per group, a colored swatch, its name in full weight, live counts. */
-.sidebar .section-wrap.g-panel { background: color-mix(in srgb, var(--raise) 55%, transparent); border: 1px solid color-mix(in srgb, var(--div) 70%, transparent); border-radius: 9px; margin: 6px 2px 0; padding: 0 2px 3px; }
+.sidebar .section-wrap.g-panel { --gtint: 12%; background: color-mix(in srgb, var(--gc, var(--dim2)) var(--gtint), var(--side)); border: 1px solid color-mix(in srgb, var(--gc, var(--dim2)) 22%, var(--div)); border-radius: 9px; margin: 6px 2px 0; padding: 0 2px 3px; }
+/* Each group's panel is tinted with a muted shade of its color, so groups read apart at a glance. */
+@media (prefers-color-scheme: light) { .sidebar .section-wrap.g-panel { --gtint: 15%; } }
 .sidebar .section-wrap.g-panel.g-closed { padding-bottom: 0; }
 .sidebar .g-panel .gh { font: 600 12px var(--f); color: var(--fg); padding: 7px 8px 5px; cursor: pointer; }
 .sidebar .g-panel.g-closed .gh { padding-bottom: 7px; }
