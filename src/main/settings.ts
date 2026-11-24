@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoTags: true,
   nextSteps: true,
   autoPush: true,
-  taskSource: "linear",
+  taskSource: "github",
   githubRepo: "",
   profile: { name: "", email: "", company: "", signoff: "", style: "" },
 };
@@ -45,7 +45,7 @@ function merge(raw: Partial<AppSettings>): AppSettings {
     autoTags: raw.autoTags ?? DEFAULT_SETTINGS.autoTags,
     nextSteps: raw.nextSteps ?? DEFAULT_SETTINGS.nextSteps,
     autoPush: raw.autoPush ?? DEFAULT_SETTINGS.autoPush,
-    taskSource: raw.taskSource === "github" ? "github" : "linear",
+    taskSource: raw.taskSource === "linear" ? "linear" : "github",
     githubRepo: raw.githubRepo ?? "",
     profile: { ...DEFAULT_SETTINGS.profile, ...raw.profile },
     codexPrices: raw.codexPrices,

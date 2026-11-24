@@ -11,7 +11,7 @@ import { useToast } from "./toast";
 const SCOPE_KEY = "happy.tasks.scope";
 const SOURCE_LABEL: Record<TaskSource, string> = { linear: "Linear", github: "GitHub" };
 /** Where Tasks come from right now (Linear unless switched to GitHub Issues). */
-const useSource = (): TaskSource => useSettings()?.taskSource ?? "linear";
+const useSource = (): TaskSource => useSettings()?.taskSource ?? "github";
 
 /** Linear / GitHub switch. */
 function SourceToggle({ source }: { source: TaskSource }) {
