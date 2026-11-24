@@ -648,20 +648,21 @@ export function RowSub({ s, onTag }: { s: SessionState; onTag(t: string): void }
   );
 }
 
-/** Group colors (cool tones), picked in order unless you choose one. */
+/** Group colors: cool tones first (blues, teals), then purples and pink. Never yellow, orange or red. */
 const GROUP_COLORS = [
   { name: "Blue", value: "#8fb4ff" },
-  { name: "Violet", value: "#c4a7e7" },
   { name: "Teal", value: "#7fd4c8" },
-  { name: "Green", value: "#a6e3a1" },
-  { name: "Pink", value: "#f2a7c8" },
+  { name: "Violet", value: "#c4a7e7" },
+  { name: "Sky", value: "#89dceb" },
   { name: "Lavender", value: "#b4befe" },
+  { name: "Pink", value: "#f2a7c8" },
   { name: "Slate", value: "#9aa3ae" },
 ];
 const GENERAL_COLOR = "#9aa3ae";
 const ROUTINES_COLOR = "#7f849c";
 const ARCHIVED_COLOR = "#5c5c5c";
-const groupColor = (g: SessionGroup, i: number) => g.color ?? GROUP_COLORS[i % (GROUP_COLORS.length - 1)].value;
+// A color no longer in the palette (e.g. the old green) falls back to the automatic one.
+const groupColor = (g: SessionGroup, i: number) => (g.color && GROUP_COLORS.some((c) => c.value === g.color) ? g.color : GROUP_COLORS[i % (GROUP_COLORS.length - 1)].value);
 
 function Group(props: {
   title: string;
