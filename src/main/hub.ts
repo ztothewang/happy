@@ -13,7 +13,9 @@ import { CursorSession } from "./cursorSession.js";
 import { GitWatch } from "./gitWatch.js";
 import { claudeWindow, readCodexLimits, readCodexModels, readCursorTier } from "./limits.js";
 import { annotate } from "./briefing.js";
-import { Linear, taskPrompt } from "./linear.js";
+import { GitHubIssues } from "./github.js";
+import { Linear } from "./linear.js";
+import { taskPrompt, type Tracker } from "./tracker.js";
 import { PostHog } from "./analytics.js";
 import { Gmail } from "./gmail.js";
 import { settings } from "./settings.js";
@@ -217,6 +219,7 @@ export class Hub implements SessionHost {
   private cloudBusy?: Promise<CloudSnapshot>;
   private cloudTimer?: NodeJS.Timeout;
   readonly linear: Linear;
+  readonly github: GitHubIssues;
   readonly posthog: PostHog;
   readonly gmail: Gmail;
   readonly calendar: Calendar;
@@ -266,6 +269,7 @@ export class Hub implements SessionHost {
     mkdirSync(dataDir, { recursive: true });
     this.media = new MediaStore(dataDir);
     this.linear = new Linear(dataDir);
+    this.github = new GitHubIssues(() => ({ repo: settings().githubRepo, mainRepo: settings().repo }));
     this.posthog = new PostHog(dataDir);
     this.gmail = new Gmail(dataDir, openAuthWindow);
     this.calendar = new Calendar(this.gmail);
@@ -853,6 +857,15 @@ export class Hub implements SessionHost {
   /** Apply changed settings to the app-owned chats (Manager, Cloud) right away. */
   applySettings() {
     const st = settings();
+    // Tasks switched between Linear and GitHub (or to another repo): drop the old lists and load the new source.
+    const taskKey = `${st.taskSource}|${st.githubRepo}`;
+    if (this.taskKey !== undefined && this.taskKey !== taskKey) {
+      this.github.reset();
+      const scopes = [...this.taskCache.keys()];
+      this.taskCache.clear();
+      for (const scope of scopes.length ? scopes : (["mine"] as TaskScope[])) void this.tasks(scope, true);
+    }
+    this.taskKey = taskKey;
     for (const s of this.sessions.values()) {
       if (!isSystemSession(s.meta) || s.meta.engine !== "claude") continue;
       const max = s.meta.isManager ? st.bypass.manager : s.meta.isEmail ? st.bypass.email : st.bypass.cloud;
@@ -863,8 +876,14 @@ export class Hub implements SessionHost {
     }
   }
 
-  // ── tasks (Linear) ─────────────────────────────────────────────
-  /** Open Linear issues; cached per scope, refreshed every 5 minutes once viewed. */
+  // ── tasks (Linear or GitHub Issues) ────────────────────────────
+  private taskKey?: string;
+  /** Where tasks come from right now (Tasks page toggle). */
+  tracker(): Tracker {
+    return settings().taskSource === "github" ? this.github : this.linear;
+  }
+
+  /** Open issues from the current tracker; cached per scope, refreshed every 5 minutes once viewed. */
   async tasks(scope: TaskScope, refresh = false): Promise<TaskList> {
     const cached = this.taskCache.get(scope);
     if (!refresh && cached) return cached;
@@ -872,7 +891,7 @@ export class Hub implements SessionHost {
     if (!busy) {
       busy = (async (): Promise<TaskList> => {
         try {
-          const list: TaskList = { scope, fetchedAt: Date.now(), issues: await this.linear.openIssues(scope) };
+          const list: TaskList = { scope, fetchedAt: Date.now(), issues: await this.tracker().openIssues(scope) };
           this.taskCache.set(scope, list);
           return list;
         } catch (e) {
@@ -902,12 +921,13 @@ export class Hub implements SessionHost {
   async startTask(issueId: string, engine: Engine): Promise<Session> {
     const issue = [...this.taskCache.values()].flatMap((l) => l.issues).find((i) => i.id === issueId || i.identifier === issueId);
     if (!issue) throw new Error("Issue not loaded; refresh Tasks and try again");
-    const raw = await this.linear.issueDetail(issue.id);
-    // Screenshots pasted into the issue only load with the Linear key: hand the agent local copies.
+    const t = this.tracker();
+    const raw = await t.issueDetail(issue.id);
+    // Screenshots pasted into a Linear issue only load with the key: hand the agent local copies.
     const detail = {
       ...raw,
-      description: await this.linear.localizeUploads(raw.description),
-      comments: await Promise.all(raw.comments.map(async (c) => ({ ...c, body: await this.linear.localizeUploads(c.body) }))),
+      description: await t.localizeUploads(raw.description),
+      comments: await Promise.all(raw.comments.map(async (c) => ({ ...c, body: await t.localizeUploads(c.body) }))),
     };
     const repo = [...this.sessions.values()].find((s) => !isSystemSession(s.meta))?.meta.worktree?.repo ?? settings().repo;
     return this.createSessionAsync({
@@ -916,7 +936,7 @@ export class Hub implements SessionHost {
       worktree: true,
       worktreeName: `${issue.identifier} ${issue.title}`,
       title: `${issue.identifier} ${issue.title}`,
-      prompt: taskPrompt(issue, detail),
+      prompt: taskPrompt(issue, detail, t.label),
       linearIssue: issue.identifier,
       group: "Tasks",
     });
@@ -1900,7 +1920,7 @@ export class Hub implements SessionHost {
         `- Agent: ${m.engine}${m.model ? ` (${m.model})` : ""} · status ${s.status} · started ${ago(m.createdAt)} · last active ${ago(m.updatedAt)}`,
         `- Folder: ${tilde(m.cwd)}${m.worktree && !m.worktree.removed ? ` (its own worktree, branch ${m.worktree.branch})` : ""}${m.git ? ` · ${gitLine(m.git)}` : ""}`,
         ...linked.map((w) => `- Also works in: ${tilde(w.path)}${w.branch ? ` (branch ${w.branch})` : ""}${w.git ? ` · ${gitLine(w.git)}` : ""}`),
-        m.linearIssue ? `- Linear issue: ${m.linearIssue}` : "",
+        m.linearIssue ? `- Ticket: ${m.linearIssue}` : "",
         m.tags?.length ? `- Tags: ${m.tags.map((t) => `#${t}`).join(" ")}` : "",
         transcript ? `- Full transcript: ${transcript}` : "",
         lastUser ? `- Last request from me (${ago(lastUser.ts)}):\n${clip(lastUser.text.trim(), 800).replace(/^/gm, "  > ")}` : "",

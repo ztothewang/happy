@@ -137,7 +137,15 @@ export function sessionMenuItems(opts: {
   return items;
 }
 
-/** What the "Close ticket" action sends to the chat's agent. */
-export const closeTicketPrompt = (issue: string) =>
-  `Close Linear issue ${issue}. First post a comment on it summarizing the outcome: what was changed and why, the commits or PR (and whether it's merged and deployed), how it was verified, and anything left open or worth knowing. ` +
-  `Then move it to Done (or Canceled if the work was dropped, saying why in the comment). Use your Linear tools; if you don't have any, tell me instead of skipping it. Reply with the comment you posted.`;
+/** What the "Close ticket" action sends to the chat's agent. GitHub issues are "#123"; Linear ones "DEB-123". */
+export const closeTicketPrompt = (issue: string) => {
+  const gh = issue.startsWith("#");
+  return (
+    `Close ${gh ? "GitHub" : "Linear"} issue ${issue}${gh ? " (the one this chat was started for; its link is in the first message)" : ""}. ` +
+    `First post a comment on it summarizing the outcome: what was changed and why, the commits or PR (and whether it's merged and deployed), how it was verified, and anything left open or worth knowing. ` +
+    (gh
+      ? `Then close it as completed (or as not planned if the work was dropped, saying why in the comment) and remove its "status: …" label. Use your GitHub tools or the gh CLI; if you have neither, tell me instead of skipping it. `
+      : `Then move it to Done (or Canceled if the work was dropped, saying why in the comment). Use your Linear tools; if you don't have any, tell me instead of skipping it. `) +
+    `Reply with the comment you posted.`
+  );
+};

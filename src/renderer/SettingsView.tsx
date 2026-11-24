@@ -11,7 +11,7 @@ const SECTIONS: Array<{ key: keyof AppSettings["show"]; label: string; hint: str
   { key: "manager", label: "Manager", hint: "board of active, done and unmerged work, plus its chat" },
   { key: "cloud", label: "Cloud", hint: "GCP health per tenant, with a board-aware chat" },
   { key: "analytics", label: "Analytics", hint: "product events from PostHog, per environment (needs an analytics block in the project config)" },
-  { key: "tasks", label: "Tasks", hint: "open Linear issues, hand one to an agent" },
+  { key: "tasks", label: "Tasks", hint: "open Linear or GitHub issues, hand one to an agent" },
   { key: "email", label: "Email", hint: "Gmail inbox, Claude drafts, zero inbox" },
   { key: "calendar", label: "Calendar", hint: "Google Calendar week view, create with Claude" },
   { key: "terminal", label: "Terminal", hint: "up to 4 shells side by side, in your main repo" },

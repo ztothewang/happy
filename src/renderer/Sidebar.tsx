@@ -324,11 +324,13 @@ function EmailRow({ active, onClick }: { active: boolean; onClick(): void }) {
   );
 }
 
-/** The Tasks entry: open Linear issues assigned to you. */
+/** The Tasks entry: open issues assigned to you (Linear or GitHub, whichever Tasks is on). */
 function TasksRow({ active, onClick }: { active: boolean; onClick(): void }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [t, setT] = useState<TaskList | null>(null);
+  const source = useSettings()?.taskSource;
   useEffect(() => {
+    setT(null);
     void hub()
       .linearStatus()
       .then((st) => {
@@ -341,7 +343,7 @@ function TasksRow({ active, onClick }: { active: boolean; onClick(): void }) {
         setConnected(true);
       }
     });
-  }, []);
+  }, [source]);
   const open = t?.issues.filter((i) => !isClosedIssue(i)) ?? [];
   const hot = open.filter((i) => i.priority === 1 || i.priority === 2).length;
   return (
@@ -350,7 +352,7 @@ function TasksRow({ active, onClick }: { active: boolean; onClick(): void }) {
       label="Tasks"
       right={connected === false ? "connect" : t ? (hot ? hot : open.length) : ""}
       tone={hot ? "hot" : "dim"}
-      title={t ? `${num(open.length)} open${hot ? ` · ${hot} urgent/high` : ""}` : connected === false ? "connect Linear" : undefined}
+      title={t ? `${num(open.length)} open${hot ? ` · ${hot} urgent/high` : ""}` : connected === false ? `connect ${source === "github" ? "GitHub" : "Linear"}` : undefined}
       active={active}
       onClick={onClick}
     />

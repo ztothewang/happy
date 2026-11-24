@@ -309,7 +309,7 @@ function AssistantBody({ it, onSimplify, onPin, onWtf, onStatus, onTags, onRevie
         </button>
       )}
       {onCloseTicket && (
-        <button className="simplify" onClick={onCloseTicket} title="Ask the agent to comment on the Linear ticket with the outcome and close it">
+        <button className="simplify" onClick={onCloseTicket} title="Ask the agent to comment on the ticket with the outcome and close it">
           close ticket
         </button>
       )}

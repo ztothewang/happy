@@ -1,6 +1,6 @@
 import { isClosedIssue } from "../shared/types";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import type { Engine, LinearIssue, LinearIssueDetail, LinearIssueInput, LinearMeta, LinearStatus, SessionState, TaskList, TaskScope } from "../shared/types";
+import type { Engine, LinearIssue, LinearIssueDetail, LinearIssueInput, LinearMeta, LinearStatus, SessionState, TaskList, TaskScope, TaskSource } from "../shared/types";
 import { hub } from "./App";
 import { Markdown } from "./Markdown";
 import { relTime, num } from "./models";
@@ -9,6 +9,52 @@ import { useSettings } from "./settings";
 import { useToast } from "./toast";
 
 const SCOPE_KEY = "happy.tasks.scope";
+const SOURCE_LABEL: Record<TaskSource, string> = { linear: "Linear", github: "GitHub" };
+/** Where Tasks come from right now (Linear unless switched to GitHub Issues). */
+const useSource = (): TaskSource => useSettings()?.taskSource ?? "linear";
+
+/** Linear / GitHub switch. */
+function SourceToggle({ source }: { source: TaskSource }) {
+  return (
+    <div className="tk-seg" role="group" aria-label="Task source">
+      {(["linear", "github"] as const).map((x) => (
+        <button key={x} className={source === x ? "on" : ""} onClick={() => source !== x && void hub().saveSettings({ taskSource: x })}>
+          {SOURCE_LABEL[x]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** GitHub Issues setup: signs in through the GitHub CLI, so the only thing to pick is the repo. */
+function GitHubConnect({ status, onRetry }: { status: LinearStatus; onRetry(): void }) {
+  const st = useSettings();
+  const [repo, setRepo] = useState(st?.githubRepo || status.repo || "");
+  return (
+    <div className="tk-connect">
+      <h2>Connect GitHub Issues</h2>
+      <p className="muted">
+        Happy uses your GitHub CLI sign-in, so there's no key to paste. If you haven't yet, run <code>gh auth login</code> in a terminal. Issues come from the repo below
+        (blank = your main repo's origin). Statuses and priorities are the repo's <code>status: …</code> and <code>priority: …</code> labels; milestones stand in for projects.
+      </p>
+      <form
+        className="tk-connect-row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void hub()
+            .saveSettings({ githubRepo: repo.trim() })
+            .then(onRetry);
+        }}
+      >
+        <input id="github-repo" spellCheck={false} placeholder="owner/repo" value={repo} onChange={(e) => setRepo(e.target.value)} />
+        <button className="kb" type="submit">
+          connect
+        </button>
+      </form>
+      {status.error && <div className="tk-err">{status.error}</div>}
+    </div>
+  );
+}
 const STATUS_KEY = "happy.tasks.statuses";
 
 /** Which statuses show: your explicit picks, else open work only (done / canceled / duplicate hidden). */
@@ -146,20 +192,21 @@ const PRIORITIES = [
 ];
 const cleanErr = (e: unknown) => String((e as Error)?.message ?? e).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 
-let metaCache: Promise<LinearMeta> | null = null;
-/** Linear teams/projects/labels for the form; `error` explains a failed load instead of spinning forever. */
+let metaCache: { source: TaskSource; p: Promise<LinearMeta> } | null = null;
+/** Teams/projects/labels for the form (Linear, or the GitHub repo); `error` explains a failed load instead of spinning forever. */
 function useLinearMeta(): { meta: LinearMeta | null; error?: string; retry(): void } {
+  const source = useSource();
   const [meta, setMeta] = useState<LinearMeta | null>(null);
   const [error, setError] = useState<string>();
   const [n, setN] = useState(0);
   useEffect(() => {
     setError(undefined);
-    metaCache ??= hub().linearMeta();
-    metaCache.then(setMeta).catch((e) => {
+    if (metaCache?.source !== source) metaCache = { source, p: hub().linearMeta() };
+    metaCache.p.then(setMeta).catch((e) => {
       metaCache = null;
       setError(cleanErr(e));
     });
-  }, [n]);
+  }, [n, source]);
   return { meta, error, retry: () => setN((x) => x + 1) };
 }
 
@@ -187,6 +234,7 @@ const formFrom = (x: LinearIssueInput | LinearIssueDetail, fallbackTeam: string)
 /** Title / status / priority / assignee / project / labels / description — shared by edit and create. */
 function IssueFields({ f, set, meta, preview }: { f: Form; set(p: Partial<Form>): void; meta: LinearMeta; preview: boolean }) {
   const team = meta.teams.find((t) => t.id === f.teamId) ?? meta.teams[0];
+  const project = useSource() === "github" ? "Milestone" : "Project";
   return (
     <div className="tk-form">
       <input id="issue-title" className="tk-f-title" placeholder="Issue title" value={f.title} onChange={(e) => set({ title: e.target.value })} />
@@ -236,9 +284,9 @@ function IssueFields({ f, set, meta, preview }: { f: Form; set(p: Partial<Form>)
           </select>
         </label>
         <label>
-          <span>Project</span>
+          <span>{project}</span>
           <select value={f.projectId} onChange={(e) => set({ projectId: e.target.value })}>
-            <option value="">No project</option>
+            <option value="">No {project.toLowerCase()}</option>
             {meta.projects
               .filter((p) => !team || p.teamIds.includes(team.id))
               .map((p) => (
@@ -295,6 +343,7 @@ function IssuePanel({ issue, sessions, engine, onEngine, onStart, onOpen, onClos
   onClose(): void;
   width: number;
 }) {
+  const source = useSource();
   const toast = useToast();
   const { meta, error: metaErr, retry } = useLinearMeta();
   const [d, setD] = useState<LinearIssueDetail | null>(null);
@@ -367,7 +416,7 @@ function IssuePanel({ issue, sessions, engine, onEngine, onStart, onOpen, onClos
           </span>
         )}
         <a className="cl-ext" href={issue.url} target="_blank" rel="noreferrer">
-          open in Linear ↗
+          open in {SOURCE_LABEL[source]} ↗
         </a>
         <button className="icon-btn" title="Close" onClick={onClose}>
           ×
@@ -399,7 +448,7 @@ function IssuePanel({ issue, sessions, engine, onEngine, onStart, onOpen, onClos
         )}
         {err || metaErr ? (
           <div className="tk-err">
-            {err ?? `Couldn't load Linear teams: ${metaErr}`}{" "}
+            {err ?? `Couldn't load ${SOURCE_LABEL[source]} fields: ${metaErr}`}{" "}
             {metaErr && (
               <button className="link-btn" onClick={retry}>
                 retry
@@ -452,6 +501,7 @@ function IssuePanel({ issue, sessions, engine, onEngine, onStart, onOpen, onClos
 }
 
 function CreatePanel({ initial, width, onClose, onCreated }: { initial?: LinearIssueInput; width: number; onClose(): void; onCreated(identifier: string): void }) {
+  const source = useSource();
   const toast = useToast();
   const { meta, error: metaErr, retry } = useLinearMeta();
   const [f, setF] = useState<Form | null>(null);
@@ -497,7 +547,7 @@ function CreatePanel({ initial, width, onClose, onCreated }: { initial?: LinearI
       <div className="tk-side-body">
         {metaErr ? (
           <div className="tk-err">
-            Couldn't load Linear teams: {metaErr}{" "}
+            Couldn't load {SOURCE_LABEL[source]} fields: {metaErr}{" "}
             <button className="link-btn" onClick={retry}>
               retry
             </button>
@@ -520,9 +570,11 @@ function CreatePanel({ initial, width, onClose, onCreated }: { initial?: LinearI
   );
 }
 
-/** Tasks: open Linear issues, sortable, expandable, one click to hand one to an agent. */
+/** Tasks: open Linear or GitHub issues, sortable, expandable, one click to hand one to an agent. */
 export function TasksView({ sessions, onOpen }: { sessions: Record<string, SessionState>; onOpen(id: string): void }) {
   const toast = useToast();
+  const source = useSource();
+  const [checks, setChecks] = useState(0);
   const [status, setStatus] = useState<LinearStatus | null>(null);
   const [scope, setScope] = useState<TaskScope>(() => load(SCOPE_KEY, "mine"));
   const { picks, setPicks, shown } = useStatusFilter();
@@ -540,8 +592,10 @@ export function TasksView({ sessions, onOpen }: { sessions: Record<string, Sessi
   const [q, setQ] = useState("");
 
   useEffect(() => {
+    setStatus(null);
+    setOpen(null);
     void hub().linearStatus().then(setStatus);
-  }, []);
+  }, [source, checks]);
   useEffect(() => save(SCOPE_KEY, scope), [scope]);
   useEffect(() => save(SORT_KEY, sort), [sort]);
   useEffect(() => {
@@ -552,7 +606,7 @@ export function TasksView({ sessions, onOpen }: { sessions: Record<string, Sessi
     setList(null);
     void hub().tasks(scope).then(setList);
     return hub().onTasks((t) => t.scope === scope && setList(t));
-  }, [status?.connected, scope]);
+  }, [status, scope]);
 
   const bySession = useMemo(() => {
     const m = new Map<string, SessionState[]>();
@@ -569,8 +623,16 @@ export function TasksView({ sessions, onOpen }: { sessions: Record<string, Sessi
     return xs.sort((a, b) => compare(a, b, sort.key) * sort.dir);
   }, [list, sort, q, picks]);
 
-  if (!status) return <div className="muted pad center mono small">checking Linear…</div>;
-  if (!status.connected) return <Connect status={status} onConnected={setStatus} />;
+  if (!status) return <div className="muted pad center mono small">checking {SOURCE_LABEL[source]}…</div>;
+  if (!status.connected)
+    return (
+      <div className="tk">
+        <div className="tk-bar">
+          <SourceToggle source={source} />
+        </div>
+        {source === "github" ? <GitHubConnect status={status} onRetry={() => setChecks((n) => n + 1)} /> : <Connect status={status} onConnected={setStatus} />}
+      </div>
+    );
 
   const head = (key: SortKey, label: string, cls = "") => (
     <th className={`tk-th ${cls} ${sort.key === key ? "on" : ""}`} onClick={() => setSort((s) => ({ key, dir: s.key === key ? ((-s.dir) as 1 | -1) : 1 }))}>
@@ -606,6 +668,7 @@ export function TasksView({ sessions, onOpen }: { sessions: Record<string, Sessi
   return (
     <div className="tk">
       <div className="tk-bar">
+        <SourceToggle source={source} />
         <div className="tk-seg" role="group" aria-label="Whose issues">
           <button className={scope === "mine" ? "on" : ""} onClick={() => setScope("mine")}>
             mine
@@ -637,7 +700,8 @@ export function TasksView({ sessions, onOpen }: { sessions: Record<string, Sessi
         </span>
         <span className="tk-bar-right">
           <span className="muted mono small bar-meta bar-opt">
-            {status.name} · {list?.fetchedAt ? `updated ${relTime(list.fetchedAt)}` : "loading…"}
+            {status.name}
+            {status.repo ? ` · ${status.repo}` : ""} · {list?.fetchedAt ? `updated ${relTime(list.fetchedAt)}` : "loading…"}
           </span>
           <button
             className="kb"

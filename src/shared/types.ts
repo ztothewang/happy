@@ -577,8 +577,13 @@ export interface CloudSnapshot {
 // ── Tasks (Linear) ──────────────────────────────────────────
 export type TaskScope = "mine" | "team";
 
+/** Where Tasks come from (Tasks page toggle). */
+export type TaskSource = "linear" | "github";
+
 export interface LinearStatus {
   connected: boolean;
+  /** GitHub: the "owner/repo" whose issues are shown. */
+  repo?: string;
   name?: string;
   email?: string;
   error?: string;
@@ -838,6 +843,10 @@ export interface AppSettings {
   nextSteps: boolean;
   /** Push a chat's worktree branch to origin whenever it has commits the remote doesn't (never main, never forced). */
   autoPush: boolean;
+  /** Tasks page source: Linear (default) or GitHub Issues. */
+  taskSource: TaskSource;
+  /** GitHub Issues repo ("owner/repo"); empty = the main repo's origin. */
+  githubRepo: string;
   /** App zoom level (Chromium steps: 0 = 100%, each step ≈ 20%). */
   zoom?: number;
 }

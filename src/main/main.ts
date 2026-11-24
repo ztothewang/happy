@@ -466,7 +466,8 @@ app.whenReady().then(async () => {
   handle("email:triageRun", () => hub.triageRun ?? null);
   handle("email:triagePick", (picked: string[]) => hub.triagePick(picked));
   handle("email:triageClear", () => hub.triageClear());
-  handle("linear:status", () => (demo?.linear ? { connected: true, name: demo.linear.name, email: demo.linear.email } : hub.linear.status()));
+  // The linear:* channels serve whichever tracker the Tasks page is on (Linear or GitHub Issues); setKey/clearKey are Linear-only.
+  handle("linear:status", () => (demo?.linear ? { connected: true, name: demo.linear.name, email: demo.linear.email } : hub.tracker().status()));
   handle("linear:setKey", async (key: string) => {
     const st = await hub.linear.setKey(key);
     void hub.tasks("mine", true);
@@ -474,21 +475,21 @@ app.whenReady().then(async () => {
   });
   handle("linear:clearKey", () => hub.linear.clearKey());
   handle("hub:tasks", (scope, refresh?: boolean) => (demo?.linear ? { scope, fetchedAt: Date.now(), issues: demo.linear.issues } : hub.tasks(scope, refresh)));
-  handle("linear:meta", () => hub.linear.meta());
-  handle("linear:addComment", (issueId: string, body: string) => hub.linear.addComment(issueId, body));
-  handle("linear:editComment", (id: string, body: string) => hub.linear.editComment(id, body));
-  handle("linear:deleteComment", (id: string) => hub.linear.deleteComment(id));
+  handle("linear:meta", () => hub.tracker().meta());
+  handle("linear:addComment", (issueId: string, body: string) => hub.tracker().addComment(issueId, body));
+  handle("linear:editComment", (id: string, body: string) => hub.tracker().editComment(id, body));
+  handle("linear:deleteComment", (id: string) => hub.tracker().deleteComment(id));
   handle("linear:update", async (id: string, input) => {
-    hub.patchTask(await hub.linear.updateIssue(id, input));
+    hub.patchTask(await hub.tracker().updateIssue(id, input));
   });
   handle("linear:create", async (input) => {
-    const r = await hub.linear.createIssue(input);
+    const r = await hub.tracker().createIssue(input);
     void hub.tasks("mine", true);
     void hub.tasks("team", true);
     return r;
   });
-  handle("linear:parse", async (text: string) => parseIssue(text, await hub.linear.meta()));
-  handle("hub:taskDetail", (id: string) => hub.linear.issueDetail(id));
+  handle("linear:parse", async (text: string) => parseIssue(text, await hub.tracker().meta(), hub.tracker().label));
+  handle("hub:taskDetail", (id: string) => hub.tracker().issueDetail(id));
   handle("hub:startTask", async (issueId: string, engine) => (await hub.startTask(issueId, engine)).snapshot());
   handle("hub:newSystemChat", (id: string) => hub.newSystemChat(id).snapshot());
   handle("hub:cloudChat", () => hub.cloudChat().snapshot());

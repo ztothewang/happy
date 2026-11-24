@@ -79,12 +79,12 @@ Request: ${text}`,
   return { title: j.title ?? "", start: j.start, end: j.end, allDay: !!j.allDay, location: j.location ?? undefined, description: j.description ?? undefined, attendees: j.attendees ?? [], addMeet: !!j.addMeet };
 }
 
-/** Natural language → Linear issue form (ids picked from the workspace's teams/projects/labels). Nothing is created. */
-export async function parseIssue(text: string, meta: import("../shared/types.js").LinearMeta): Promise<import("../shared/types.js").LinearIssueInput> {
+/** Natural language → issue form (Linear or GitHub) (ids picked from the workspace's teams/projects/labels). Nothing is created. */
+export async function parseIssue(text: string, meta: import("../shared/types.js").LinearMeta, source = "Linear"): Promise<import("../shared/types.js").LinearIssueInput> {
   const teams = meta.teams.map((t) => `team ${t.key} "${t.name}" id=${t.id}\n  members: ${t.members.map((m) => `${m.name}=${m.id}`).join(", ")}\n  labels: ${t.labels.map((l) => `${l.name}=${l.id}`).join(", ")}`).join("\n");
   const projects = meta.projects.map((p) => `"${p.name}"=${p.id}`).join(", ");
   const out = await once(
-    `Turn this request from ${who()} (Linear viewer id ${meta.viewerId}) into a Linear issue.
+    `Turn this request from ${who()} (${source} viewer id ${meta.viewerId}) into a ${source} issue.
 Workspace:
 ${teams}
 projects: ${projects || "(none)"}
