@@ -35,12 +35,33 @@ export function ChatWallView({ sessions, groups, onOpen, onGrid }: { sessions: S
   ]
     .filter((x) => x.members.length)
     .map((x) => ({ ...x, members: [...x.members].sort((a, b) => lastMessageAt(b) - lastMessageAt(a)) }));
+  // Folded sections, remembered on this Mac (separate from the sidebar's folding).
+  const [closed, setClosed] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("happy.wall.closed") ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  const fold = (next: string[]) => {
+    setClosed(next);
+    try {
+      localStorage.setItem("happy.wall.closed", JSON.stringify(next));
+    } catch {}
+  };
+  const toggle = (id: string) => fold(closed.includes(id) ? closed.filter((x) => x !== id) : [...closed, id]);
+  const allClosed = sections.length > 0 && sections.every((x) => closed.includes(x.id));
   return (
     <div className="chatwall">
       <div className="ac-bar">
         <b>Chat wall</b>
         <span className="muted mono small">{chats.length} active</span>
         <span className="ac-bar-right">
+          {sections.length > 1 && (
+            <button className="link-btn" onClick={() => fold(allClosed ? [] : sections.map((x) => x.id))}>
+              {allClosed ? "expand all" : "collapse all"}
+            </button>
+          )}
           {picked.length > 0 && (
             <>
               <span className="muted small">{picked.length} in the grid</span>
@@ -56,10 +77,12 @@ export function ChatWallView({ sessions, groups, onOpen, onGrid }: { sessions: S
       </div>
       <div className="ac-scroll">
         {sections.map((sec) => (
-          <section key={sec.id} className="ac-sec">
-            <h3>
+          <section key={sec.id} className={`ac-sec ${closed.includes(sec.id) ? "closed" : ""}`}>
+            <h3 onClick={() => toggle(sec.id)} title={closed.includes(sec.id) ? "Expand" : "Collapse"}>
+              <span className={`caret-icon ${closed.includes(sec.id) ? "" : "open"}`}>›</span>
               {sec.name} <span className="ov-count">{sec.members.length}</span>
             </h3>
+            {!closed.includes(sec.id) && (
             <div className="ac-cards">
               {sec.members.map((s) => {
                   const m = latest(s);
@@ -86,6 +109,7 @@ export function ChatWallView({ sessions, groups, onOpen, onGrid }: { sessions: S
                   );
                 })}
             </div>
+            )}
           </section>
         ))}
         {!sections.length && <div className="muted pad center">No active chats.</div>}

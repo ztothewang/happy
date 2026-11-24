@@ -1807,7 +1807,11 @@ pre.code { position: relative; }
 .ac-bar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .ac-bar .tk-go { display: inline-flex; align-items: center; gap: 6px; }
 .ac-scroll { flex: 1; overflow-y: auto; padding: 6px 18px 30px; }
-.ac-sec h3 { font-size: 13px; margin: 18px 0 8px; }
+.ac-sec h3 { font-size: 13px; margin: 18px 0 8px; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
+.ac-sec h3 .caret-icon { display: inline-block; width: 8px; color: var(--dim2); font-size: 11px; transition: transform 0.12s; }
+.ac-sec h3 .caret-icon.open { transform: rotate(90deg); }
+.ac-sec h3:hover { color: var(--fg); }
+.ac-sec.closed h3 { margin-bottom: 0; }
 .ac-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
 .ac-card { border: 1px solid var(--div); border-radius: 8px; background: var(--raise); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; min-width: 0; }
 .ac-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--div)); }

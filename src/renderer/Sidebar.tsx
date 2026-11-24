@@ -812,6 +812,13 @@ export function Sidebar(props: {
   const routines = live.filter((s) => s.routineId);
   const chats = live.filter((s) => !s.routineId);
   const ungrouped = chats.filter((s) => !s.groupId || !props.groups.some((g) => g.id === s.groupId));
+  const [generalOpen, setGeneralOpen] = useState(() => {
+    try {
+      return localStorage.getItem("happy.sidebar.general") !== "0";
+    } catch {
+      return true;
+    }
+  });
   const [routinesOpen, setRoutinesOpen] = useState(() => {
     try {
       return localStorage.getItem("happy.sidebar.routines") !== "0";
@@ -831,11 +838,13 @@ export function Sidebar(props: {
   }, []);
 
   const gridIds = useGrid();
+  // General has no header (so nothing to fold) when it is the only section.
+  const generalBare = !props.groups.some((g) => chats.some((x) => x.groupId === g.id)) && !routines.length;
   // Multi-select: ⌘-click toggles a chat, shift-click selects a range (in the order shown); Esc clears.
   const [picked, setPicked] = useState<string[]>([]);
   const anchor = useRef<string | null>(null);
   const shownOrder = [
-    ...nestForks(ungrouped),
+    ...(generalOpen || filtering || generalBare ? nestForks(ungrouped) : []),
     ...props.groups.flatMap((g) => (g.collapsed && !filtering ? [] : nestForks(chats.filter((x) => x.groupId === g.id)))),
     ...(routinesOpen || filtering ? nestForks(routines) : []),
     ...(showArchived || filtering ? nestForks(archived) : []),
@@ -973,8 +982,15 @@ export function Sidebar(props: {
           title="General"
           color={GENERAL_COLOR}
           needs={needsYou(ungrouped)}
-          bare={!props.groups.some((g) => chats.some((x) => x.groupId === g.id)) && !routines.length}
+          bare={generalBare}
           members={ungrouped}
+          collapsed={!generalOpen && !filtering && !generalBare}
+          onToggle={() => {
+            setGeneralOpen(!generalOpen);
+            try {
+              localStorage.setItem("happy.sidebar.general", generalOpen ? "0" : "1");
+            } catch {}
+          }}
           onDropSession={(id) => hub().moveToGroup(id, null)}
         >
           {rows(ungrouped)}
